@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,18 +20,20 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-
-/**
- * @packageDocumentation
- * @module tiledmap
- */
+*/
 
 import { SpriteFrame } from '../2d/assets';
-import { Rect, Texture2D } from '../core';
+import { Texture2D } from '../asset/assets';
+import { Rect } from '../core';
 import { GID, TiledGrid, TiledTextureGrids, TMXTilesetInfo } from './tiled-types';
 
-export function fillTextureGrids (tileset: TMXTilesetInfo, texGrids: TiledTextureGrids, spFrame?: SpriteFrame) {
+let _enableTexelOffset = false;
+
+export function enableTexelOffsetUtils (enable: boolean): void {
+    _enableTexelOffset = enable;
+}
+
+export function fillTextureGrids (tileset: TMXTilesetInfo, texGrids: TiledTextureGrids, spFrame?: SpriteFrame): void {
     const spf: SpriteFrame = spFrame || tileset.sourceImage!;
     const tex: Texture2D = spf.texture as Texture2D;
 
@@ -100,15 +101,24 @@ export function fillTextureGrids (tileset: TMXTilesetInfo, texGrids: TiledTextur
 
         tileset.rectForGID(gid as unknown as GID, grid);
 
-        if (!spFrame || count > 1) {
+        if (!spFrame || count > 1 || tileset.imageOffset) {
             if (spFrame) {
                 grid._name = spFrame.name;
                 const lm = spFrame.unbiasUV[0];
                 const bm = spFrame.rotated ? spFrame.unbiasUV[1] : spFrame.unbiasUV[5];
-                grid.l = lm + (grid.x + 0.5) / texWidth;
-                grid.t = bm + (grid.y + 0.5) / texHeight;
-                grid.r = lm + (grid.x + grid.width - 0.5) / texWidth;
-                grid.b = bm + (grid.y + grid.height - 0.5) / texHeight;
+
+                if (_enableTexelOffset) {
+                    grid.l = lm + (grid.x + 0.5) / texWidth;
+                    grid.t = bm + (grid.y + 0.5) / texHeight;
+                    grid.r = lm + (grid.x + grid.width - 0.5) / texWidth;
+                    grid.b = bm + (grid.y + grid.height - 0.5) / texHeight;
+                } else {
+                    grid.l = lm + (grid.x) / texWidth;
+                    grid.t = bm + (grid.y) / texHeight;
+                    grid.r = lm + (grid.x + grid.width) / texWidth;
+                    grid.b = bm + (grid.y + grid.height) / texHeight;
+                }
+
                 grid._rect = new Rect(grid.x, grid.y, grid.width, grid.height);
             } else {
                 grid.l = grid.x / texWidth;
@@ -137,32 +147,5 @@ export function fillTextureGrids (tileset: TMXTilesetInfo, texGrids: TiledTextur
         grid.cy = (grid.t + grid.b) / 2;
 
         texGrids.set(gid as unknown as GID, grid);
-    }
-}
-
-export function loadAllTextures (textures: SpriteFrame[], loadedCallback: any) {
-    const totalNum = textures.length;
-    if (totalNum === 0) {
-        loadedCallback();
-        return;
-    }
-
-    let curNum = 0;
-    const itemCallback = () => {
-        curNum++;
-        if (curNum >= totalNum) {
-            loadedCallback();
-        }
-    };
-
-    for (let i = 0; i < totalNum; i++) {
-        const tex = textures[i];
-        if (!tex.loaded) {
-            tex.once('load', () => {
-                itemCallback();
-            });
-        } else {
-            itemCallback();
-        }
     }
 }

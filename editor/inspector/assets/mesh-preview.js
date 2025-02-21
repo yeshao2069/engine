@@ -1,37 +1,62 @@
 'use strict';
 
-exports.template = `
-<div class="preview">
-    <div class="info">
-        <ui-label value="Vertices:0" class="vertices"></ui-label>
-        <ui-label value="Triangles:0" class="triangles"></ui-label>
+
+exports.template = /* html */`
+<ui-section header="i18n:ENGINE.inspector.preview.header" class="preview-section config no-padding" expand>
+    <div class="preview">
+        <div class="info">
+            <ui-label value="Vertices:0" class="vertices"></ui-label>
+            <ui-label value="Triangles:0" class="triangles"></ui-label>
+            <div class="select-box">
+                <ui-select class="preview-channel">
+                </ui-select>
+                <ui-select class="preview-type">
+                </ui-select>
+            </div>
+            <div>
+                <ui-label value="" class="minPosLabel"></ui-label>
+            </div>
+            <div>
+                <ui-label value="" class="maxPosLabel"></ui-label>
+            </div>
+        </div>
+        <div class="image">
+            <canvas class="canvas"></canvas>
+        </div>
     </div>
-    <div class="image">
-        <canvas class="canvas"></canvas>
-    </div>
-</div>
+</ui-section>
 `;
 
-exports.style = `
+exports.style = /* css */`
+.preview-section {
+    margin-top: 0px;
+}
 .preview {
-    margin-top: 10px;
     border-top: 1px solid var(--color-normal-border);
 }
 .preview > .info {
-    padding-top: 8px;
+    padding: 4px 4px 0 4px;
 }
 .preview > .info > ui-label {
     margin-right: 6px;
 }
 .preview > .image {
-    height: 200px;
+    height: var(--inspector-footer-preview-height, 200px);
     overflow: hidden;
     display: flex;
     flex: 1;
-    margin-right: 10px;
 }
 .preview >.image > .canvas {
     flex: 1;
+}
+.select-box {
+    float: right;
+}
+.preview-channel {
+    display: none;
+}
+.preview-channel.show {
+    display: inline-block;
 }
 `;
 
@@ -41,18 +66,61 @@ exports.$ = {
     triangles: '.triangles',
     image: '.image',
     canvas: '.canvas',
+    minPosLabel: '.minPosLabel',
+    maxPosLabel: '.maxPosLabel',
+    previewType: '.preview-type',
+    previewChannel: '.preview-channel',
 };
 
+async function callMeshPreviewFunction(funcName, ...args) {
+    return await Editor.Message.request('scene', 'call-preview-function', 'scene:mesh-preview', funcName, ...args);
+}
+const previewSelectType = {
+    shaded: 'Shaded',
+    uv: 'UV Layout',
+};
 const Elements = {
     preview: {
         ready() {
             const panel = this;
 
+            let _isPreviewDataDirty = false;
+            Object.defineProperty(panel, 'isPreviewDataDirty', {
+                get() {
+                    return _isPreviewDataDirty;
+                },
+                set(value) {
+                    if (value !== _isPreviewDataDirty) {
+                        _isPreviewDataDirty = value;
+                        value && panel.refreshPreview();
+                    }
+                },
+            });
+
+            panel.$.previewType.innerHTML = Object.values(previewSelectType).map(v => `<option value="${v}">${v}</option>`).join('');
+            panel.$.previewType.value = previewSelectType.shaded;
+
+            panel.$.previewType.addEventListener('confirm', (event) => {
+                const value = event.target.value;
+                if (value === previewSelectType.uv) {
+                    panel.$.previewChannel.classList.add('show');
+                    panel.$.previewChannel.value = 0;
+                } else {
+                    panel.$.previewChannel.classList.remove('show');
+                }
+                panel.isPreviewDataDirty = true;
+            });
+            panel.$.previewChannel.addEventListener('confirm', () => {
+                panel.isPreviewDataDirty = true;
+            });
+
             panel.$.canvas.addEventListener('mousedown', async (event) => {
-                await Editor.Message.request('scene', 'on-mesh-preview-mouse-down', { x: event.x, y: event.y });
+                // Non-model previews do not respond to events
+                if (panel.$.previewType.value !== previewSelectType.shaded) { return; }
+                await callMeshPreviewFunction('onMouseDown', { x: event.x, y: event.y, button: event.button });
 
                 async function mousemove(event) {
-                    await Editor.Message.request('scene', 'on-mesh-preview-mouse-move', {
+                    await callMeshPreviewFunction('onMouseMove', {
                         movementX: event.movementX,
                         movementY: event.movementY,
                     });
@@ -61,7 +129,7 @@ const Elements = {
                 }
 
                 async function mouseup(event) {
-                    await Editor.Message.request('scene', 'on-mesh-preview-mouse-up', {
+                    await callMeshPreviewFunction('onMouseUp', {
                         x: event.x,
                         y: event.y,
                     });
@@ -74,7 +142,17 @@ const Elements = {
 
                 document.addEventListener('mousemove', mousemove);
                 document.addEventListener('mouseup', mouseup);
-               
+
+                panel.isPreviewDataDirty = true;
+            });
+
+            panel.$.canvas.addEventListener('wheel', async (event) => {
+                // Non-model previews do not respond to events
+                if (panel.$.previewType.value !== previewSelectType.shaded) { return; }
+                await callMeshPreviewFunction('onMouseWheel', {
+                    wheelDeltaY: event.wheelDeltaY,
+                    wheelDeltaX: event.wheelDeltaX,
+                });
                 panel.isPreviewDataDirty = true;
             });
 
@@ -97,20 +175,34 @@ const Elements = {
             }
 
             await panel.glPreview.init({ width: panel.$.canvas.clientWidth, height: panel.$.canvas.clientHeight });
-            const info = await Editor.Message.request('scene', 'set-mesh-preview-mesh', panel.asset.uuid);
+
+            // reset
+            panel.$.previewType.value = previewSelectType.shaded;
+            panel.$.previewChannel.value = 0;
+            panel.$.previewChannel.classList.remove('show');
+
+            const info = await callMeshPreviewFunction('setMesh', panel.asset.uuid);
+            panel.previewUVs = await callMeshPreviewFunction('getModelUVs', panel.asset.uuid);
+
+            if (panel.previewUVs.length === 0) {
+                panel.$.previewType.innerHTML = `<option value="${previewSelectType.shaded}">${previewSelectType.shaded}</option>`;
+            } else {
+                panel.$.previewType.innerHTML = Object.values(previewSelectType).map(v => `<option value="${v}">${v}</option>`).join('');
+                panel.$.previewChannel.innerHTML = panel.previewUVs.map((_, i) => `<option value="${i}">Channel ${i}</option>`).join('');
+            }
+
             panel.infoUpdate(info);
-            panel.refreshPreview();
+            panel.isPreviewDataDirty = true;
         },
         close() {
             const panel = this;
-
             panel.resizeObserver.unobserve(panel.$.image);
-        }
+            panel.previewUVs = [];
+        },
     },
     info: {
         ready() {
             const panel = this;
-
             panel.infoUpdate = Elements.info.update.bind(panel);
         },
         update(info) {
@@ -120,47 +212,27 @@ const Elements = {
 
             const panel = this;
 
-            panel.$.vertices.value = 'Vertices:' + info.vertices;
-            panel.$.triangles.value = 'Triangles:' + info.polygons;
+            panel.$.vertices.value = 'Vertices: ' + info.vertices;
+            panel.$.triangles.value = 'Triangles: ' + info.polygons;
+
+            panel.$.minPosLabel.value = '';
+            if (info.minPosition) {
+                const pos = info.minPosition;
+                panel.$.minPosLabel.value = `MinPos: (${pos.x.toFixed(3)}, ${pos.y.toFixed(3)}, ${pos.z.toFixed(3)})`;
+            }
+
+            panel.$.maxPosLabel.value = '';
+            if (info.maxPosition) {
+                const pos = info.maxPosition;
+                panel.$.maxPosLabel.value = `MaxPos: (${pos.x.toFixed(3)}, ${pos.y.toFixed(3)}, ${pos.z.toFixed(3)})`;
+            }
 
             panel.isPreviewDataDirty = true;
         },
         close() {
-            Editor.Message.request('scene', 'hide-mesh-preview');
+            callMeshPreviewFunction('hide');
         },
     },
-};
-
-exports.update = function (assetList, metaList) {
-    this.assetList = assetList;
-    this.metaList = metaList;
-    this.asset = assetList[0];
-    this.meta = metaList[0];
-
-    for (const prop in Elements) {
-        const element = Elements[prop];
-        if (element.update) {
-            element.update.call(this);
-        }
-    }
-};
-
-exports.ready = function () {
-    for (const prop in Elements) {
-        const element = Elements[prop];
-        if (element.ready) {
-            element.ready.call(this);
-        }
-    }
-};
-
-exports.close = function () {
-    for (const prop in Elements) {
-        const element = Elements[prop];
-        if (element.close) {
-            element.close.call(this);
-        }
-    }
 };
 
 exports.methods = {
@@ -172,37 +244,78 @@ exports.methods = {
             return;
         }
 
-        if (panel.isPreviewDataDirty) {
-            panel.isPreviewDataDirty = false;
-
+        const doDraw = async function() {
             try {
                 const canvas = panel.$.canvas;
-                const image = panel.$.image;
+                const { clientWidth: width, clientHeight: height } = panel.$.image;
 
-                const width = image.clientWidth;
-                const height = image.clientHeight;
                 if (canvas.width !== width || canvas.height !== height) {
                     canvas.width = width;
                     canvas.height = height;
 
-                    panel.glPreview.initGL(canvas, { width, height });
-                    panel.glPreview.resizeGL(width, height);
+                    await panel.glPreview.initGL(canvas, { width, height });
+                    await panel.glPreview.resizeGL(width, height);
+                }
+                let info;
+                if (panel.$.previewType.value === previewSelectType.shaded) {
+                    info = await panel.glPreview.queryPreviewData({
+                        width: canvas.width,
+                        height: canvas.height,
+                    });
+                }
+                if (panel.$.previewType.value === previewSelectType.uv) {
+                    info = panel.glPreview.computedUV(panel.previewUVs[panel.$.previewChannel.value], canvas.width, canvas.height);
                 }
 
-                const info = await panel.glPreview.queryPreviewData({
-                    width: canvas.width,
-                    height: canvas.height,
-                });
-
-                panel.glPreview.drawGL(info.buffer, info.width, info.height);
+                panel.glPreview.drawGL(info);
             } catch (e) {
                 console.warn(e);
             }
-        }
+        };
 
-        cancelAnimationFrame(panel.animationId);
-        panel.animationId = requestAnimationFrame(() => {
-            panel.refreshPreview();
+        requestAnimationFrame(async () => {
+            await doDraw();
+            panel.isPreviewDataDirty = false;
+
         });
     },
+};
+
+exports.ready = function() {
+    for (const prop in Elements) {
+        const element = Elements[prop];
+        if (element.ready) {
+            element.ready.call(this);
+        }
+    }
+};
+
+exports.update = function(assetList, metaList) {
+    this.assetList = assetList;
+    this.metaList = metaList;
+    this.asset = assetList[0];
+    this.meta = metaList[0];
+
+    // 如何多选就隐藏预览
+    if (assetList.length > 1) {
+        this.$.container.style.display = 'none';
+    } else {
+        this.$.container.style.display = 'block';
+    }
+
+    for (const prop in Elements) {
+        const element = Elements[prop];
+        if (element.update) {
+            element.update.call(this);
+        }
+    }
+};
+
+exports.close = function() {
+    for (const prop in Elements) {
+        const element = Elements[prop];
+        if (element.close) {
+            element.close.call(this);
+        }
+    }
 };

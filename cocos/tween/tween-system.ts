@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,17 +20,12 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
-/**
- * @packageDocumentation
- * @module tween
- */
-
-import { EDITOR } from 'internal:constants';
-import { System, Director, director } from '../core';
+import { EDITOR_NOT_IN_PREVIEW } from 'internal:constants';
+import { System, SystemPriority } from '../core';
 import { ActionManager } from './actions/action-manager';
-import { legacyCC } from '../core/global-exports';
+import { director, DirectorEvent } from '../game';
 
 /**
  * @en
@@ -62,28 +56,32 @@ export class TweenSystem extends System {
      * @zh
      * 获取动作管理器。
      */
-    get ActionManager () {
+    get ActionManager (): ActionManager {
         return this.actionMgr;
     }
 
     private readonly actionMgr = new ActionManager();
 
+    constructor () {
+        super();
+    }
+
     /**
      * @en
-     * The update will auto execute after all compnents update.
+     * The update will auto execute after all components update.
      * @zh
      * 此方法会在组件 update 之后自动执行。
-     * @param dt 间隔时间
+     * @param dt @en The delta time @zh 间隔时间
      */
-    update (dt: number) {
-        if (!EDITOR || legacyCC.GAME_VIEW || this._executeInEditMode) {
+    update (dt: number): void {
+        if (!EDITOR_NOT_IN_PREVIEW || this._executeInEditMode) {
             this.actionMgr.update(dt);
         }
     }
 }
 
-director.on(Director.EVENT_INIT, () => {
+director.on(DirectorEvent.INIT, () => {
     const sys = new TweenSystem();
-    (TweenSystem.instance as any) = sys;
-    director.registerSystem(TweenSystem.ID, sys, 100);
+    (TweenSystem as any).instance = sys;
+    director.registerSystem(TweenSystem.ID, sys, SystemPriority.MEDIUM);
 });

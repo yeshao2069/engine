@@ -1,9 +1,9 @@
 (function () {
-    if (!(cc && cc.EditBoxComponent)) {
+    if (!(cc && cc.internal && cc.internal.EditBox)) {
         return;
     }
 
-    const EditBoxComp = cc.EditBoxComponent;
+    const EditBoxComp = cc.internal.EditBox;
     const js = cc.js;
     const KeyboardReturnType = EditBoxComp.KeyboardReturnType;
     const MAX_VALUE = 65535;
@@ -24,8 +24,9 @@
                 return 'go';
             case KeyboardReturnType.NEXT:
                 return 'next';
+            default:
+                return 'done';
         }
-        return 'done';
     }
 
     function MiniGameEditBoxImpl () {
@@ -57,7 +58,7 @@
                 return;
             }
             this._ensureKeyboardHide(() => {
-                let delegate = this._delegate;
+                const delegate = this._delegate;
                 this._showKeyboard();
                 this._registerKeyboardEvent();
                 this._editing = true;
@@ -68,33 +69,39 @@
 
         endEditing () {
             this._hideKeyboard();
-            let cbs = this._eventListeners;
+            const cbs = this._eventListeners;
             cbs.onKeyboardComplete && cbs.onKeyboardComplete();
         },
 
         _registerKeyboardEvent () {
-            let self = this;
-            let delegate = this._delegate;
-            let cbs = this._eventListeners;
+            const self = this;
+            const delegate = this._delegate;
+            const cbs = this._eventListeners;
 
             cbs.onKeyboardInput = function (res) {
                 if (delegate._string !== res.value) {
                     delegate._editBoxTextChanged(res.value);
                 }
-            }
+            };
 
             cbs.onKeyboardConfirm = function (res) {
-                delegate._editBoxEditingReturn();
-                let cbs = self._eventListeners;
-                cbs.onKeyboardComplete && cbs.onKeyboardComplete();
-            }
+                res && res.value ? delegate._editBoxEditingReturn(res.value) : delegate._editBoxEditingReturn();
+                const cbs = self._eventListeners;
+                cbs.onKeyboardComplete && cbs.onKeyboardComplete(res);
+            };
 
-            cbs.onKeyboardComplete = function () {
+            cbs.onKeyboardComplete = function (res) {
                 self._editing = false;
                 _currentEditBoxImpl = null;
-                self._unregisterKeyboardEvent();
-                delegate._editBoxEditingDidEnded();
-            }
+                // wechat program do not have offKeyboard related callback
+                if (cc.sys.platform !== cc.sys.Platform.WECHAT_MINI_PROGRAM) {
+                    self._unregisterKeyboardEvent();
+                }
+                if (res && res.value && res.value !== delegate.string) {
+                    delegate._editBoxTextChanged(res.value);
+                }
+                res && res.value ? delegate._editBoxEditingDidEnded(res.value) : delegate._editBoxEditingDidEnded();
+            };
 
             __globalAdapter.onKeyboardInput(cbs.onKeyboardInput);
             __globalAdapter.onKeyboardConfirm(cbs.onKeyboardConfirm);
@@ -102,7 +109,7 @@
         },
 
         _unregisterKeyboardEvent () {
-            let cbs = this._eventListeners;
+            const cbs = this._eventListeners;
 
             if (cbs.onKeyboardInput) {
                 __globalAdapter.offKeyboardInput(cbs.onKeyboardInput);
@@ -123,7 +130,7 @@
         },
 
         _ensureKeyboardHide (cb) {
-            let otherEditing = this._otherEditing();
+            const otherEditing = this._otherEditing();
             if (!otherEditing && !_hideKeyboardTimeout) {
                 return cb();
             }
@@ -140,8 +147,8 @@
         },
 
         _showKeyboard () {
-            let delegate = this._delegate;
-            let multiline = (delegate.inputMode === EditBoxComp.InputMode.ANY);
+            const delegate = this._delegate;
+            const multiline = (delegate.inputMode === EditBoxComp.InputMode.ANY);
             __globalAdapter.showKeyboard({
                 defaultValue: delegate.string,
                 maxLength: delegate.maxLength < 0 ? MAX_VALUE : delegate.maxLength,
@@ -153,7 +160,7 @@
                 },
                 fail (res) {
                     cc.warn(res.errMsg);
-                }
+                },
             });
         },
 
@@ -168,5 +175,4 @@
             });
         },
     });
-})();
-
+}());

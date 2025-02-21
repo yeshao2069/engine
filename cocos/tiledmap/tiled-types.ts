@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,19 +20,15 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
-/**
- * @packageDocumentation
- * @module tiledmap
- */
-
-import { Color, Rect, Size, Texture2D, Vec2 } from '../core';
+import { Color, Rect, Size, Vec2 } from '../core';
 import { SpriteFrame } from '../2d/assets';
 import { ccenum } from '../core/value-types/enum';
 import { HorizontalTextAlignment, VerticalTextAlignment } from '../2d/components/label';
+import { Texture2D } from '../asset/assets';
 
-export type PropertiesInfo = { [key: string]: number | string };
+export interface PropertiesInfo { [key: string]: number | string }
 export type TiledAnimationType = Map<GID, TiledAnimation>;
 
 export interface TiledAnimation {
@@ -350,7 +345,7 @@ export class TMXTilesetInfo {
      * First grid
      * @property {number} firstGid
      */
-    firstGid: GID = 0 as any;
+    firstGid: GID = 0;
 
     /**
      * Spacing
@@ -373,6 +368,8 @@ export class TMXTilesetInfo {
 
     imageName: string | null = null;
 
+    imageOffset: Vec2 | null = null;
+
     imageSize = new Size(0, 0);
 
     tileOffset = new Vec2(0, 0);
@@ -381,16 +378,21 @@ export class TMXTilesetInfo {
 
     collection = false;
 
-    rectForGID (gid_: MixedGID | GID, result?: TiledGrid) {
+    rectForGID (gid_: number, result?: TiledGrid): Rect | TiledGrid {
         const rect = result || new Rect(0, 0, 0, 0);
         rect.width = this._tileSize.width;
         rect.height = this._tileSize.height;
         let gid = gid_ as unknown as number;
         gid &= TileFlag.FLIPPED_MASK;
         gid -= (this.firstGid as unknown as number);
-        const max_x = Math.floor((this.imageSize.width - this.margin * 2 + this.spacing) / (this._tileSize.width + this.spacing));
-        rect.x = Math.round((gid % max_x) * (this._tileSize.width + this.spacing) + this.margin);
-        rect.y = Math.round(Math.floor(gid / max_x) * (this._tileSize.height + this.spacing) + this.margin);
+        if (this.imageOffset) {
+            rect.x = this.imageOffset.x;
+            rect.y = this.imageOffset.y;
+        } else {
+            const max_x = Math.floor((this.imageSize.width - this.margin * 2 + this.spacing) / (this._tileSize.width + this.spacing));
+            rect.x = Math.round((gid % max_x) * (this._tileSize.width + this.spacing) + this.margin);
+            rect.y = Math.round(Math.floor(gid / max_x) * (this._tileSize.height + this.spacing) + this.margin);
+        }
         return rect;
     }
 }
@@ -425,7 +427,7 @@ export class TMXObjectGroupInfo {
      * Gets the Properties.
      * @return {Array}
      */
-    getProperties () {
+    getProperties (): PropertiesInfo {
         return this.properties;
     }
 
@@ -433,12 +435,13 @@ export class TMXObjectGroupInfo {
      * Set the Properties.
      * @param {object} value
      */
-    setProperties (value: PropertiesInfo) {
+    setProperties (value: PropertiesInfo): void {
         this.properties = value;
     }
 }
 
 export interface TMXObject {
+    properties: PropertiesInfo;
     id: number | string;
     name: string;
     width: number;
@@ -491,7 +494,7 @@ export class TMXLayerInfo {
      * Gets the Properties.
      * @return {Object}
      */
-    getProperties () {
+    getProperties (): PropertiesInfo {
         return this.properties;
     }
 
@@ -499,7 +502,7 @@ export class TMXLayerInfo {
      * Set the Properties.
      * @param {object} value
      */
-    setProperties (value: PropertiesInfo) {
+    setProperties (value: PropertiesInfo): void {
         this.properties = value;
     }
 

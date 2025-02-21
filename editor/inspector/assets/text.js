@@ -1,32 +1,72 @@
 const { createReadStream } = require('fs');
 const ReadLine = require('readline');
+const { extname } = require('path');
 
 const MAX_LINES = 400;
 const MAX_LENGTH = 20000;
 
-exports.template = `
+exports.template = /* html */`
 <section class="asset-text">
     <ui-code language="xml"></ui-code>
+    <ui-markdown></ui-markdown>
 </section>`;
 
 exports.$ = {
     container: '.asset-text',
     code: 'ui-code',
+    markdown: 'ui-markdown',
 };
 
-exports.style = `
+exports.style = /* css */`
 .asset-text {
     flex: 1;
     display: flex;
     flex-direction: column;
-    height: 0px; // it is necessary
+    /* it is necessary */
+    height: 0px;
 }
 .asset-text > ui-code {
     flex: 1;
 }
 `;
 
-exports.update = function (assetList, metaList) {
+exports.methods = {
+    renderContent(content, type = '.txt') {
+        const panel = this;
+        const domMap = {
+            '.txt': panel.$.code,
+            '.html': panel.$.code,
+            '.htm': panel.$.code,
+            '.xml': panel.$.code,
+            '.css': panel.$.code,
+            '.less': panel.$.code,
+            '.scss': panel.$.code,
+            '.stylus': panel.$.code,
+            '.yaml': panel.$.code,
+            '.ini': panel.$.code,
+            '.csv': panel.$.code,
+            '.proto': panel.$.code,
+            '.ts': panel.$.code,
+            '.tsx': panel.$.code,
+            '.md': panel.$.markdown,
+            '.markdown': panel.$.markdown,
+        };
+
+        Object.values(domMap).forEach(dom => {
+            if (dom) {
+                dom.style.display = 'none';
+                dom.textContent = '';
+            }
+        });
+
+        if (domMap[type]) {
+            domMap[type].textContent = content;
+            domMap[type].style.display = 'block';
+        }
+    },
+};
+
+exports.update = function(assetList, metaList) {
     this.assetList = assetList;
     this.metaList = metaList;
     this.meta = metaList[0];
@@ -59,7 +99,7 @@ exports.update = function (assetList, metaList) {
     readLineStream.on('line', (line) => {
         const lineLength = line.length;
         if (lineLength > remainLength) {
-            line = line.substr(0, remainLength);
+            line = line.substring(0, remainLength);
             remainLength = 0;
         } else {
             remainLength -= lineLength;
@@ -79,9 +119,7 @@ exports.update = function (assetList, metaList) {
         if (err) {
             throw err;
         }
-        
-        if (this.$.code) {
-            this.$.code.textContent = text;
-        }
+
+        this.renderContent(text, extname(this.asset.name));
     });
 };

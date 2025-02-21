@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,7 +20,7 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
 import { IVec2Like, Vec2 } from '../../../core';
 
@@ -40,12 +39,12 @@ import { IVec2Like, Vec2 } from '../../../core';
 /// For more information about this algorithm, see http://mnbayazit.com/406/bayazit
 /// </summary>
 
-function At (i: number, vertices: IVec2Like[]) {
+function At (i: number, vertices: IVec2Like[]): IVec2Like {
     const s = vertices.length;
     return vertices[i < 0 ? s - (-i % s) : i % s];
 }
 
-function Copy (i: number, j: number, vertices: IVec2Like[]) {
+function Copy (i: number, j: number, vertices: IVec2Like[]): IVec2Like[] {
     const p: IVec2Like[] = [];
     while (j < i) j += vertices.length;
     // p.reserve(j - i + 1);
@@ -55,24 +54,31 @@ function Copy (i: number, j: number, vertices: IVec2Like[]) {
     return p;
 }
 
-/// <summary>
-/// Decompose the polygon into several smaller non-concave polygon.
-/// If the polygon is already convex, it will return the original polygon, unless it is over Settings.MaxPolygonVertices.
-/// Precondition: Counter Clockwise polygon
-/// </summary>
-/// <param name="vertices"></param>
-/// <returns></returns>
-export function ConvexPartition (vertices: IVec2Like[]) {
+/**
+* @en
+* Decompose the polygon into several smaller non-concave polygon.
+* If the polygon is already convex, it will return the original polygon, unless it is over Settings.MaxPolygonVertices.
+* Precondition: Counter Clockwise polygon
+* @zh
+* 使用Mark Bayazit算法将输入多边形拆分成多个凸多边形。如果输入多边形是凸多边形，将返回原多边形。要求输入多边形是逆时针的。
+* @param polygon @en one polygon. @zh 一个多边形。
+* @return @en polygon array. @zh 多边形数组。
+*/
+export function ConvexPartition (vertices: IVec2Like[]): IVec2Like[][] {
     // We force it to CCW as it is a precondition in this algorithm.
     ForceCounterClockWise(vertices);
 
     let list: IVec2Like[][] = [];
-    let d; let lowerDist; let upperDist;
-    let p;
+    let d: number = 0;
+    let lowerDist: number = 0;
+    let upperDist: number = 0;
+    let p: Vec2;
     let lowerInt = new Vec2();
     let upperInt = new Vec2(); // intersection points
-    let lowerIndex = 0; let upperIndex = 0;
-    let lowerPoly; let upperPoly;
+    let lowerIndex = 0;
+    let upperIndex = 0;
+    let lowerPoly: IVec2Like[];
+    let upperPoly: IVec2Like[];
 
     for (let i = 0; i < vertices.length; ++i) {
         if (Reflex(i, vertices)) {
@@ -82,8 +88,12 @@ export function ConvexPartition (vertices: IVec2Like[]) {
                 if (Left(At(i - 1, vertices), At(i, vertices), At(j, vertices))
                     && RightOn(At(i - 1, vertices), At(i, vertices), At(j - 1, vertices))) {
                     // find the povar of intersection
-                    p = LineIntersect(At(i - 1, vertices), At(i, vertices), At(j, vertices),
-                        At(j - 1, vertices));
+                    p = LineIntersect(
+                        At(i - 1, vertices),
+                        At(i, vertices),
+                        At(j, vertices),
+                        At(j - 1, vertices),
+                    );
                     if (Right(At(i + 1, vertices), At(i, vertices), p)) {
                         // make sure it's inside the poly
                         d = SquareDist(At(i, vertices), p);
@@ -98,8 +108,12 @@ export function ConvexPartition (vertices: IVec2Like[]) {
 
                 if (Left(At(i + 1, vertices), At(i, vertices), At(j + 1, vertices))
                     && RightOn(At(i + 1, vertices), At(i, vertices), At(j, vertices))) {
-                    p = LineIntersect(At(i + 1, vertices), At(i, vertices), At(j, vertices),
-                        At(j + 1, vertices));
+                    p = LineIntersect(
+                        At(i + 1, vertices),
+                        At(i, vertices),
+                        At(j, vertices),
+                        At(j + 1, vertices),
+                    );
                     if (Left(At(i - 1, vertices), At(i, vertices), p)) {
                         d = SquareDist(At(i, vertices), p);
                         if (d < upperDist) {
@@ -166,7 +180,7 @@ export function ConvexPartition (vertices: IVec2Like[]) {
     return list;
 }
 
-function CanSee (i, j, vertices) {
+function CanSee (i: number, j: number, vertices: IVec2Like[]): boolean {
     if (Reflex(i, vertices)) {
         if (LeftOn(At(i, vertices), At(i - 1, vertices), At(j, vertices))
             && RightOn(At(i, vertices), At(i + 1, vertices), At(j, vertices))) return false;
@@ -191,48 +205,54 @@ function CanSee (i, j, vertices) {
 }
 
 // precondition: ccw
-function Reflex (i: number, vertices: IVec2Like[]) {
+function Reflex (i: number, vertices: IVec2Like[]): boolean {
     return Right(i, vertices);
 }
 
-function Right (a: number | IVec2Like, b: IVec2Like | IVec2Like[], c?: IVec2Like) {
+function Right (a: number | IVec2Like, b: IVec2Like | IVec2Like[], c?: IVec2Like): boolean {
     if (typeof c === 'undefined') {
         const i = a as number; const vertices = b as IVec2Like[];
 
         a = At(i - 1, vertices);
         b = At(i, vertices);
         c = At(i + 1, vertices);
+        if (typeof a === 'undefined') {
+            a = b;
+        }
+        if (typeof c === 'undefined') {
+            c = b;
+        }
     }
 
     return Area(a as IVec2Like, b as IVec2Like, c) < 0;
 }
 
-function Left (a: IVec2Like, b: IVec2Like, c: IVec2Like) {
+function Left (a: IVec2Like, b: IVec2Like, c: IVec2Like): boolean {
     return Area(a, b, c) > 0;
 }
 
-function LeftOn (a: IVec2Like, b: IVec2Like, c: IVec2Like) {
+function LeftOn (a: IVec2Like, b: IVec2Like, c: IVec2Like): boolean {
     return Area(a, b, c) >= 0;
 }
 
-function RightOn (a: IVec2Like, b: IVec2Like, c: IVec2Like) {
+function RightOn (a: IVec2Like, b: IVec2Like, c: IVec2Like): boolean {
     return Area(a, b, c) <= 0;
 }
 
-function SquareDist (a: IVec2Like, b: IVec2Like) {
+function SquareDist (a: IVec2Like, b: IVec2Like): number {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     return dx * dx + dy * dy;
 }
 
 // forces counter clock wise order.
-export function ForceCounterClockWise (vertices) {
+export function ForceCounterClockWise (vertices: IVec2Like[]): void {
     if (!IsCounterClockWise(vertices)) {
         vertices.reverse();
     }
 }
 
-export function IsCounterClockWise (vertices) {
+export function IsCounterClockWise (vertices: IVec2Like[]): boolean {
     // We just return true for lines
     if (vertices.length < 3) return true;
 
@@ -240,7 +260,7 @@ export function IsCounterClockWise (vertices) {
 }
 
 // gets the signed area.
-function GetSignedArea (vertices) {
+function GetSignedArea (vertices: IVec2Like[]): number {
     let i;
     let area = 0;
 
@@ -254,7 +274,7 @@ function GetSignedArea (vertices) {
 }
 
 // From Mark Bayazit's convex decomposition algorithm
-function LineIntersect (p1, p2, q1, q2) {
+function LineIntersect (p1: IVec2Like, p2: IVec2Like, q1: IVec2Like, q2: IVec2Like): Vec2 {
     const i = new Vec2();
     const a1 = p2.y - p1.y;
     const b1 = p1.x - p2.x;
@@ -274,7 +294,7 @@ function LineIntersect (p1, p2, q1, q2) {
 
 // from Eric Jordan's convex decomposition library, it checks if the lines a0->a1 and b0->b1 cross.
 // if they do, intersectionPovar will be filled with the povar of crossing. Grazing lines should not return true.
-function LineIntersect2 (a0, a1, b0, b1, intersectionPoint) {
+function LineIntersect2 (a0: IVec2Like, a1: IVec2Like, b0: IVec2Like, b1: IVec2Like, intersectionPoint: IVec2Like): boolean {
     if (a0 == b0 || a0 == b1 || a1 == b0 || a1 == b1) return false;
 
     const x1 = a0.x;
@@ -310,11 +330,11 @@ function LineIntersect2 (a0, a1, b0, b1, intersectionPoint) {
     return false;
 }
 
-function FloatEquals (value1, value2) {
+function FloatEquals (value1: number, value2: number): boolean {
     return Math.abs(value1 - value2) <= 10e-7;
 }
 
 // returns a positive number if c is to the left of the line going from a to b. Positive number if povar is left, negative if povar is right, and 0 if points are collinear.</returns>
-function Area (a: IVec2Like, b: IVec2Like, c: IVec2Like) {
+function Area (a: IVec2Like, b: IVec2Like, c: IVec2Like): number {
     return a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y);
 }

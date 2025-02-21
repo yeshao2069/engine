@@ -1,19 +1,18 @@
 /*
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -24,28 +23,30 @@
  THE SOFTWARE.
 */
 
-/**
- * @packageDocumentation
- * @hidden
- */
-
 import { TEST } from 'internal:constants';
-import { legacyCC } from '../../core/global-exports';
+import { cclegacy } from '../../core';
 
 /**
- *
+ * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
  */
 const eventRegx = /^(click)(\s)*=|(param)(\s)*=/;
 const imageAttrReg = /(\s)*src(\s)*=|(\s)*height(\s)*=|(\s)*width(\s)*=|(\s)*align(\s)*=|(\s)*offset(\s)*=|(\s)*click(\s)*=|(\s)*param(\s)*=/;
-/**
- * A utils class for parsing HTML texts. The parsed results will be an object array.
- */
 
+/**
+ * @en A utils class for parsing HTML texts. The parsed results will be an object array.
+ * @zh 一个用于解析HTML文本的工具类。解析后的结果将是一个对象数组。
+ * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
+ */
 export interface IHtmlTextParserResultObj{
     text?: string;
     style?: IHtmlTextParserStack;
 }
 
+/**
+ * @en Html Text Parser Stack interface
+ * @zh Html 文本解析器接口
+ * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
+ */
 export interface IHtmlTextParserStack{
     color?: string;
     size?: number;
@@ -63,6 +64,11 @@ export interface IHtmlTextParserStack{
     outline?: { color: string, width: number };
 }
 
+/**
+ * @en Html Text Parser Stack
+ * @zh Html 文本解析器
+ * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
+ */
 export class HtmlTextParser {
     private _specialSymbolArray: Array<[RegExp, string]> = [];
     private _stack: IHtmlTextParserStack[] = [];
@@ -76,7 +82,7 @@ export class HtmlTextParser {
         this._specialSymbolArray.push([/&apos;/g, '\'']);
     }
 
-    public parse (htmlString: string) {
+    public parse (htmlString: string): IHtmlTextParserResultObj[] {
         this._resultObjectArray.length = 0;
         this._stack.length = 0;
 
@@ -118,14 +124,14 @@ export class HtmlTextParser {
         return this._resultObjectArray;
     }
 
-    private _attributeToObject (attribute: string) {
+    private _attributeToObject (attribute: string): IHtmlTextParserStack {
         attribute = attribute.trim();
 
         const obj: IHtmlTextParserStack = {};
         let header = /^(color|size)(\s)*=/.exec(attribute);
         let tagName = '';
         let nextSpace = 0;
-        let eventHanlderString = '';
+        let eventHandlerString = '';
         if (header) {
             tagName = header[0];
             attribute = attribute.substring(tagName.length).trim();
@@ -152,8 +158,8 @@ export class HtmlTextParser {
 
             // tag has event arguments
             if (nextSpace > -1) {
-                eventHanlderString = attribute.substring(nextSpace + 1).trim();
-                obj.event = this._processEventHandler(eventHanlderString);
+                eventHandlerString = attribute.substring(nextSpace + 1).trim();
+                obj.event = this._processEventHandler(eventHandlerString);
             }
             return obj;
         }
@@ -170,26 +176,35 @@ export class HtmlTextParser {
 
         header = /^(img(\s)*src(\s)*=[^>]+\/)/.exec(attribute);
         let remainingArgument = '';
+        let rightQuot = -1;
         if (header && header[0].length > 0) {
             tagName = header[0].trim();
             if (tagName.startsWith('img') && tagName[tagName.length - 1] === '/') {
                 header = imageAttrReg.exec(attribute);
-                let tagValue;
+                let tagValue: string;
                 let isValidImageTag = false;
                 while (header) {
                     // skip the invalid tags at first
                     attribute = attribute.substring(attribute.indexOf(header[0]));
-                    tagName = attribute.substr(0, header[0].length);
-                    // remove space and = character
-                    remainingArgument = attribute.substring(tagName.length).trim();
-                    nextSpace = remainingArgument.indexOf(' ');
-
-                    tagValue = (nextSpace > -1) ? remainingArgument.substr(0, nextSpace) : remainingArgument;
+                    tagName = attribute.substring(0, header[0].length);
+                    const originTagNameLength = tagName.length;
                     tagName = tagName.replace(/[^a-zA-Z]/g, '').trim();
                     tagName = tagName.toLowerCase();
 
+                    // remove space and = character
+                    remainingArgument = attribute.substring(originTagNameLength).trim();
+                    if (tagName === 'src') {
+                        rightQuot = this.getRightQuotationIndex(remainingArgument);
+                    } else {
+                        rightQuot = -1;
+                    }
+                    nextSpace = remainingArgument.indexOf(' ', rightQuot + 1 >= remainingArgument.length ? -1 : rightQuot + 1);
+                    tagValue = (nextSpace > -1) ? remainingArgument.substring(0, nextSpace) : remainingArgument;
                     attribute = remainingArgument.substring(nextSpace).trim();
-                    if (tagValue.endsWith('/')) tagValue = tagValue.slice(0, -1);
+
+                    if (tagValue.endsWith('/')) {
+                        tagValue = tagValue.slice(0, -1);
+                    }
                     if (tagName === 'src') {
                         switch (tagValue.charCodeAt(0)) {
                         case 34: // "
@@ -244,16 +259,16 @@ export class HtmlTextParser {
             if (attribute) {
                 const outlineAttrReg = /(\s)*color(\s)*=|(\s)*width(\s)*=|(\s)*click(\s)*=|(\s)*param(\s)*=/;
                 header = outlineAttrReg.exec(attribute);
-                let tagValue;
+                let tagValue: string;
                 while (header) {
                     // skip the invalid tags at first
                     attribute = attribute.substring(attribute.indexOf(header[0]));
-                    tagName = attribute.substr(0, header[0].length);
+                    tagName = attribute.substring(0, header[0].length);
                     // remove space and = character
                     remainingArgument = attribute.substring(tagName.length).trim();
                     nextSpace = remainingArgument.indexOf(' ');
                     if (nextSpace > -1) {
-                        tagValue = remainingArgument.substr(0, nextSpace);
+                        tagValue = remainingArgument.substring(0, nextSpace);
                     } else {
                         tagValue = remainingArgument;
                     }
@@ -306,7 +321,28 @@ export class HtmlTextParser {
         return obj;
     }
 
-    private _processEventHandler (eventString: string) {
+    // find the right part of the first pair of following quotations.
+    private getRightQuotationIndex (remainingArgument: string): number {
+        let leftQuot = -1;
+        let rightQuot = -1;
+        // Skip a pair of quotations for avoiding spaces in image name are detected.
+        const leftSingleQuot = remainingArgument.indexOf('\'');
+        const leftDoubleQuot = remainingArgument.indexOf('"');
+
+        const useSingleQuot = leftSingleQuot  > -1 && (leftSingleQuot < leftDoubleQuot || leftDoubleQuot === -1);
+        const useDoubleQuot = leftDoubleQuot > -1 && (leftDoubleQuot < leftSingleQuot || leftSingleQuot === -1);
+        if (useSingleQuot) {
+            leftQuot = leftSingleQuot;
+            rightQuot = remainingArgument.indexOf('\'', leftQuot + 1 >= remainingArgument.length ? -1 : leftQuot + 1);
+        } else if (useDoubleQuot) {
+            leftQuot = leftDoubleQuot;
+            rightQuot = remainingArgument.indexOf('"', leftQuot + 1 >= remainingArgument.length ? -1 : leftQuot + 1);
+        }
+
+        return rightQuot;
+    }
+
+    private _processEventHandler (eventString: string): Record<string, any> {
         const obj = {};
         let index = 0;
         let isValidTag = false;
@@ -353,7 +389,7 @@ export class HtmlTextParser {
         return obj;
     }
 
-    private _addToStack (attribute: string) {
+    private _addToStack (attribute: string): void {
         const obj = this._attributeToObject(attribute);
 
         if (this._stack.length === 0) {
@@ -373,7 +409,7 @@ export class HtmlTextParser {
         }
     }
 
-    private _processResult (value: string) {
+    private _processResult (value: string): void {
         if (value.length === 0) {
             return;
         }
@@ -386,7 +422,7 @@ export class HtmlTextParser {
         }
     }
 
-    private _escapeSpecialSymbol (str: string) {
+    private _escapeSpecialSymbol (str: string): string {
         for (const symbolArr of this._specialSymbolArray) {
             const key = symbolArr[0];
             const value = symbolArr[1];
@@ -399,5 +435,5 @@ export class HtmlTextParser {
 }
 
 if (TEST) {
-    legacyCC._Test.HtmlTextParser = HtmlTextParser;
+    cclegacy._Test.HtmlTextParser = HtmlTextParser;
 }

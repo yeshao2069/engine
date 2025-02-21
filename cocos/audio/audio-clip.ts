@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,21 +20,16 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
-/**
- * @packageDocumentation
- * @module component/audio
- */
-
-import {
-    ccclass, type, serializable, override,
-} from 'cc.decorator';
-import { Asset } from '../core/assets/asset';
-import { legacyCC } from '../core/global-exports';
-import { AudioType } from '../../pal/audio/type';
+import { ccclass, serializable, override } from 'cc.decorator';
+import { AudioPlayer } from 'pal/audio';
+import { Asset } from '../asset/assets/asset';
+import { cclegacy } from '../core';
+import { AudioState, AudioType } from '../../pal/audio/type';
 
 export interface AudioMeta {
+    player: AudioPlayer | null,
     url: string;
     type: AudioType;
     duration: number;
@@ -43,20 +37,20 @@ export interface AudioMeta {
 
 /**
  * @en
- * The audio clip asset. <br>
- * 'started' event is emitted once the audio began to play. <br>
- * 'ended' event is emitted once the audio stopped. <br>
- * Low-level platform-specific details are handled independently inside each clip.
+ * The audio clip asset.
  * @zh
- * 音频片段资源。<br>
- * 每当音频片段实际开始播放时，会发出 'started' 事件；<br>
- * 每当音频片段自然结束播放时，会发出 'ended' 事件。<br>
- * 每个片段独立处理自己依赖的平台相关的底层细节。
+ * 音频片段资源。
  */
 @ccclass('cc.AudioClip')
 export class AudioClip extends Asset {
     public static AudioType = AudioType;
 
+    /**
+     * @engineInternal
+     */
+    public set duration (v: number) {
+        this._duration = v;
+    }
     @serializable
     protected _duration = 0; // we serialize this because it's unavailable at runtime on some platforms
 
@@ -64,31 +58,50 @@ export class AudioClip extends Asset {
 
     protected _meta: AudioMeta | null = null;
 
-    constructor () {
-        super();
-        this.loaded = false;
+    private _player: AudioPlayer | null = null;
+
+    constructor (name?: string) {
+        super(name);
     }
 
+    public destroy (): boolean {
+        const destroyResult = super.destroy();
+        this._player?.destroy();
+        this._player = null;
+        if (this._meta) {
+            this._meta.player = null;
+        }
+        return destroyResult;
+    }
+
+    /**
+     * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
+     */
     set _nativeAsset (meta: AudioMeta | null) {
         this._meta = meta;
         if (meta) {
-            this.loaded = true;
             this._loadMode = meta.type;
-            this.emit('load');
+            this._player = meta.player;
         } else {
             this._meta = null;
             this._loadMode = AudioType.UNKNOWN_AUDIO;
             this._duration = 0;
-            this.loaded = false;
         }
     }
-
-    get _nativeAsset () {
+    get _nativeAsset (): AudioMeta | null {
         return this._meta;
     }
 
+    /**
+     * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
+     */
     @override
-    get _nativeDep () {
+    get _nativeDep (): {
+        uuid: string;
+        audioLoadMode: AudioType;
+        ext: string;
+        __isNative__: boolean;
+        } {
         return {
             uuid: this._uuid,
             audioLoadMode: this.loadMode,
@@ -97,21 +110,108 @@ export class AudioClip extends Asset {
         };
     }
 
-    get loadMode () {
+    get loadMode (): AudioType {
         return this._loadMode;
     }
 
-    public validate () {
+    public validate (): boolean {
         return !!this._meta;
     }
 
-    public getDuration () {
+    public getDuration (): number {
         // Dynamicly loaded audioClip._duration is 0
         if (this._duration) {
             return this._duration;
         }
         return this._meta ? this._meta.duration : 0;
     }
+
+    // #region deprecated method
+    /**
+     * @deprecated since v3.1.0, please use AudioSource.prototype.state instead.
+     */
+    public get state (): AudioState {
+        return this._player ? this._player.state : AudioState.INIT;
+    }
+
+    /**
+     * @deprecated since v3.1.0, please use AudioSource.prototype.getCurrentTime() instead.
+     */
+    public getCurrentTime (): number {
+        return this._player ? this._player.currentTime : 0;
+    }
+
+    /**
+     * @deprecated since v3.1.0, please use AudioSource.prototype.getVolume() instead.
+     */
+    public getVolume (): number {
+        return this._player ? this._player.volume : 0;
+    }
+
+    /**
+     * @deprecated since v3.1.0, please use AudioSource.prototype.getLoop() instead.
+     */
+    public getLoop (): boolean {
+        return this._player ? this._player.loop : false;
+    }
+
+    /**
+     * @deprecated since v3.1.0, please use AudioSource.prototype.setCurrentTime() instead.
+     */
+    public setCurrentTime (time: number): void {
+        this._player?.seek(time).catch((e) => {});
+    }
+
+    /**
+     * @deprecated since v3.1.0, please use AudioSource.prototype.setVolume() instead.
+     */
+    public setVolume (volume: number): void {
+        if (this._player) {
+            this._player.volume = volume;
+        }
+    }
+
+    /**
+     * @deprecated since v3.1.0, please use AudioSource.prototype.setLoop() instead.
+     */
+    public setLoop (loop: boolean): void {
+        if (this._player) {
+            this._player.loop = loop;
+        }
+    }
+
+    /**
+     * @deprecated since v3.1.0, please use AudioSource.prototype.play() instead.
+     */
+    public play (): void {
+        this._player?.play().catch((e) => {});
+    }
+
+    /**
+     * @deprecated since v3.1.0, please use AudioSource.prototype.pause() instead.
+     */
+    public pause (): void {
+        this._player?.pause().catch((e) => {});
+    }
+
+    /**
+     * @deprecated since v3.1.0, please use AudioSource.prototype.stop() instead.
+     */
+    public stop (): void {
+        this._player?.stop().catch((e) => {});
+    }
+
+    /**
+     * @deprecated since v3.1.0, please use AudioSource.prototype.playOneShot() instead.
+     */
+    public playOneShot (volume = 1): void {
+        if (this._nativeAsset) {
+            AudioPlayer.loadOneShotAudio(this._nativeAsset.url, volume).then((oneShotAudio) => {
+                oneShotAudio.play();
+            }).catch((e) => {});
+        }
+    }
+    // #endregion deprecated method
 }
 
-legacyCC.AudioClip = AudioClip;
+cclegacy.AudioClip = AudioClip;

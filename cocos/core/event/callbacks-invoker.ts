@@ -1,19 +1,18 @@
 /*
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -24,41 +23,38 @@
  THE SOFTWARE.
 */
 
-/**
- * @packageDocumentation
- * @hidden
- */
-
 import { TEST } from 'internal:constants';
 import { Pool } from '../memop';
 import { array, createMap } from '../utils/js';
-import { CCObject, isValid } from '../data/object';
+import { isCCObject, isValid } from '../data/object';
 import { legacyCC } from '../global-exports';
 
 const fastRemoveAt = array.fastRemoveAt;
 
-function empty () { }
+function empty (): void { }
 
 class CallbackInfo {
     public callback: AnyFunction = empty;
-    public target: unknown | undefined = undefined;
+    public target: unknown = undefined;
     public once = false;
 
-    public set (callback: AnyFunction, target?: unknown, once?: boolean) {
+    constructor () {}
+
+    public set (callback: AnyFunction, target?: unknown, once?: boolean): void {
         this.callback = callback || empty;
         this.target = target;
         this.once = !!once;
     }
 
-    public reset () {
+    public reset (): void {
         this.target = undefined;
         this.callback = empty;
         this.once = false;
     }
 
-    public check () {
+    public check (): boolean {
         // Validation
-        if (this.target instanceof CCObject && !isValid(this.target, true)) {
+        if (isCCObject(this.target) && !isValid(this.target, true)) {
             return false;
         } else {
             return true;
@@ -76,13 +72,15 @@ export class CallbackList {
     public isInvoking = false;
     public containCanceled = false;
 
+    constructor () {}
+
     /**
      * @zh 从列表中移除与指定目标相同回调函数的事件。
      * @en Remove the event listeners with the given callback from the list
      *
      * @param cb - The callback to be removed
      */
-    public removeByCallback (cb: AnyFunction) {
+    public removeByCallback (cb: AnyFunction): void {
         for (let i = 0; i < this.callbackInfos.length; ++i) {
             const info = this.callbackInfos[i];
             if (info && info.callback === cb) {
@@ -98,7 +96,7 @@ export class CallbackList {
      * @en Remove the event listeners with the given target from the list
      * @param target
      */
-    public removeByTarget (target: unknown) {
+    public removeByTarget (target: unknown): void {
         for (let i = 0; i < this.callbackInfos.length; ++i) {
             const info = this.callbackInfos[i];
             if (info && info.target === target) {
@@ -115,7 +113,7 @@ export class CallbackList {
      * @en Remove the event listener at the given index
      * @param index
      */
-    public cancel (index: number) {
+    public cancel (index: number): void {
         const info = this.callbackInfos[index];
         if (info) {
             info.reset();
@@ -133,7 +131,7 @@ export class CallbackList {
      * @zh 注销所有事件。
      * @en Cancel all event listeners
      */
-    public cancelAll () {
+    public cancelAll (): void {
         for (let i = 0; i < this.callbackInfos.length; i++) {
             const info = this.callbackInfos[i];
             if (info) {
@@ -149,7 +147,7 @@ export class CallbackList {
      * @zh 立即删除所有取消的回调。（在移除过程中会更加紧凑的排列数组）
      * @en Delete all canceled callbacks and compact array
      */
-    public purgeCanceled () {
+    public purgeCanceled (): void {
         for (let i = this.callbackInfos.length - 1; i >= 0; --i) {
             const info = this.callbackInfos[i];
             if (!info) {
@@ -163,7 +161,7 @@ export class CallbackList {
      * @zh 清除并重置所有数据。
      * @en Clear all data
      */
-    public clear () {
+    public clear (): void {
         this.cancelAll();
         this.callbackInfos.length = 0;
         this.isInvoking = false;
@@ -178,13 +176,21 @@ export interface ICallbackTable {
     [x: string]: CallbackList | undefined;
 }
 
+type EventType = string | number;
 /**
  * @zh CallbacksInvoker 用来根据事件名（Key）管理事件监听器列表并调用回调方法。
  * @en CallbacksInvoker is used to manager and invoke event listeners with different event keys,
  * each key is mapped to a CallbackList.
+ * @engineInternal
  */
-export class CallbacksInvoker {
+export class CallbacksInvoker<EventTypeClass extends EventType = EventType> {
+    /**
+     * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
+     */
     public _callbackTable: ICallbackTable = createMap(true);
+    private _offCallback?: () => void;
+
+    constructor () {}
 
     /**
      * @zh 向一个事件名注册一个新的事件监听器，包含回调函数和调用者
@@ -195,7 +201,7 @@ export class CallbacksInvoker {
      * @param target - Callback callee
      * @param once - Whether invoke the callback only once (and remove it)
      */
-    public on (key: string, callback: AnyFunction, target?: unknown, once?: boolean) {
+    public on (key: EventTypeClass, callback: AnyFunction, target?: unknown, once?: boolean): AnyFunction {
         if (!this.hasEventListener(key, callback, target)) {
             let list = this._callbackTable[key];
             if (!list) {
@@ -215,7 +221,7 @@ export class CallbacksInvoker {
      * @param callback - Callback function when event triggered
      * @param target - Callback callee
      */
-    public hasEventListener (key: string, callback?: AnyFunction, target?: unknown) {
+    public hasEventListener (key: EventTypeClass, callback?: AnyFunction, target?: unknown): boolean {
         const list = this._callbackTable && this._callbackTable[key];
         if (!list) {
             return false;
@@ -251,17 +257,18 @@ export class CallbacksInvoker {
      * @en Removes all callbacks registered in a certain event type or all callbacks registered with a certain target
      * @param keyOrTarget - The event type or target with which the listeners will be removed
      */
-    public removeAll (keyOrTarget: string | unknown) {
-        if (typeof keyOrTarget === 'string') {
+    public removeAll (keyOrTarget: unknown): void {
+        const type = typeof keyOrTarget;
+        if (type === 'string' || type === 'number') {
             // remove by key
-            const list = this._callbackTable && this._callbackTable[keyOrTarget];
+            const list = this._callbackTable && this._callbackTable[keyOrTarget as string|number];
             if (list) {
                 if (list.isInvoking) {
                     list.cancelAll();
                 } else {
                     list.clear();
                     callbackListPool.free(list);
-                    delete this._callbackTable[keyOrTarget];
+                    delete this._callbackTable[keyOrTarget as string|number];
                 }
             }
         } else if (keyOrTarget) {
@@ -290,7 +297,7 @@ export class CallbacksInvoker {
      * @param callback - The callback function of the event listener, if absent all event listeners for the given type will be removed
      * @param target - The callback callee of the event listener
      */
-    public off (key: string, callback?: AnyFunction, target?: unknown) {
+    public off (key: EventTypeClass, callback?: AnyFunction, target?: unknown): void {
         const list = this._callbackTable && this._callbackTable[key];
         if (list) {
             const infos = list.callbackInfos;
@@ -306,6 +313,7 @@ export class CallbacksInvoker {
                 this.removeAll(key);
             }
         }
+        this._offCallback?.();
     }
 
     /**
@@ -318,7 +326,7 @@ export class CallbacksInvoker {
      * @param arg3 - The fourth argument to be passed to the callback
      * @param arg4 - The fifth argument to be passed to the callback
      */
-    public emit (key: string, arg0?: any, arg1?: any, arg2?: any, arg3?: any, arg4?: any) {
+    public emit (key: EventTypeClass, arg0?: any, arg1?: any, arg2?: any, arg3?: any, arg4?: any): void {
         const list: CallbackList = this._callbackTable && this._callbackTable[key]!;
         if (list) {
             const rootInvoker = !list.isInvoking;
@@ -358,7 +366,7 @@ export class CallbacksInvoker {
     /**
      * 移除所有回调。
      */
-    public clear () {
+    public clear (): void {
         for (const key in this._callbackTable) {
             const list = this._callbackTable[key];
             if (list) {
@@ -367,6 +375,14 @@ export class CallbacksInvoker {
                 delete this._callbackTable[key];
             }
         }
+    }
+
+    /**
+     * @engineInternal
+     * @mangle
+     */
+    public _registerOffCallback (cb: () => void): void {
+        this._offCallback = cb;
     }
 }
 

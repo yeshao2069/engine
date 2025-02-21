@@ -1,15 +1,16 @@
 'use strict';
 
 const { readFileSync, existsSync } = require('fs');
+const { updateElementReadonly } = require('../utils/assets');
 
-exports.template = `
+exports.template = /* html */`
 <div class="asset-effect">
     <ui-prop>
         <ui-label slot="label" value="i18n:ENGINE.assets.effect.shader" tooltip="i18n:ENGINE.assets.effect.shaderTip"></ui-label>
         <ui-select slot="content" class="shader-select"></ui-select>
     </ui-prop>
 
-    <ui-section expand class="config">
+    <ui-section expand class="section" cache-expand="effect-combinations">
         <ui-label slot="header" value="i18n:ENGINE.assets.effect.combinations" tooltip="i18n:ENGINE.assets.effect.combinationsTip"></ui-label>
         <div class="description">
             <ui-label value="i18n:ENGINE.assets.effect.choose"></ui-label>
@@ -19,58 +20,74 @@ exports.template = `
     </ui-section>
 
     <div class="codes"></div>
+
+    <ui-label class="multiple-warn-tip" value="i18n:ENGINE.assets.multipleWarning"></ui-label>
 </div>
 `;
 
-exports.style = `
-    .asset-effect {  }
-    .asset-effect > * {
-        margin-bottom: 8px;
+exports.style = /* css */`
+    .asset-effect {
+        padding-right: 4px;
     }
-    .asset-effect > .config > .description {
+
+    .asset-effect[multiple-invalid] > *:not(.multiple-warn-tip) {
+        display: none!important;
+     }
+
+     .asset-effect[multiple-invalid] > .multiple-warn-tip {
+        display: block;
+     }
+
+    .asset-effect .multiple-warn-tip {
+        display: none;
         text-align: center;
-        color: var(--color-normal-border-weakest);
+        color: var(--color-focus-contrast-weakest);
+        margin-top: 8px;
     }
-    .asset-effect > .config > .combinations {
-        padding: 10px 0;
+
+    .asset-effect > .section > .description {
+        text-align: center;
+        color: var(--color-normal-fill-weakest);
     }
-    .asset-effect > .config > .combinations .checktab {
-        line-height: 20px;
-        margin-left: 5px;
-        margin-right: 5px;
+    .asset-effect > .section > .combinations .tab {
+        margin-left: 4px;
         min-width: 60px;
+        width: calc(50% - 4px);
     }
-    .asset-effect > .config > .combinations .checktab[checked="true"] {
-        border-color: var(--color-focus-contrast-weakest);
-        background-color: var(--color-focus-fill-weaker);
-    }
-    .asset-effect > .codes > * {
-        margin-bottom: 8px;
+    .asset-effect > .section > .combinations .tab[checked="true"] {
+        background-color: var(--color-info-fill-important);
+        border-color: var(--color-info-fill-important);
+        color: var(--color-info-contrast-important);
     }
     .asset-effect > .codes .tabs  {
-        margin: 10px auto;
-        text-align: center;
+        margin: 4px auto 6px auto;
     }
     .asset-effect > .codes .tabs > .tab  {
         padding: 0;
         width: 110px;
+        height: 20px;
+        box-sizing: border-box;
         text-align: center;
         cursor: pointer;
         display: inline-block;
-        background: var(--color-normal-fill-weakest);
+        color: var(--color-normal-contrast-emphasis);
+        border: calc(var(--size-normal-border) * 1px) solid var(--color-default-border);
     }
     .asset-effect > .codes .tabs > .tab:first-child  {
-        border-top-left-radius: 4px;
-        border-bottom-left-radius: 4px;
-        border-right: 1px solid var(--color-normal-fill-emphasis);
+        border-top-left-radius: 2px;
+        border-bottom-left-radius: 2px;
+        border-right: 1px solid var(--color-default-border);
     }
     .asset-effect > .codes .tabs > .tab:last-child  {
-        border-top-right-radius: 4px;
-        border-bottom-right-radius: 4px;
-        border-left: 1px solid var(--color-normal-fill-emphasis);
+        border-top-right-radius: 2px;
+        border-bottom-right-radius: 2px;
+        border-left: 1px solid var(--color-default-border);
     }
+    .asset-effect > .codes .tabs > .tab:hover,
     .asset-effect > .codes .tabs > .tab[active="true"]  {
-        background: var(--color-normal-fill-emphasis);
+        background-color: var(--color-default-fill-normal);
+        background-color: var(--color-default-fill-important);
+        color: var(--color-normal-contrast);
     }
     .asset-effect > .codes ui-code  {
         max-height: 400px;
@@ -95,12 +112,18 @@ const Elements = {
         ready() {
             const panel = this;
 
+            panel.shadersIndex = 0;
+
             panel.$.shaderSelect.addEventListener('change', (event) => {
-                this.shadersIndex = event.target.value;
+                panel.shadersIndex = event.target.value;
 
                 // There are other properties that are updated depending on its change
                 Elements.combinations.update.call(panel);
                 Elements.codes.update.call(panel);
+            });
+
+            panel.$.shaderSelect.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
             });
         },
         update() {
@@ -112,13 +135,17 @@ const Elements = {
             });
             panel.$.shaderSelect.innerHTML = optionsHtml;
 
+            if (panel.shadersIndex > panel.shaders.length - 1) {
+                panel.shadersIndex = 0;
+            }
+
             panel.$.shaderSelect.value = panel.shadersIndex;
 
             if (panel.shaders[panel.shadersIndex]) {
                 panel.$.shaderSelect.setAttribute('tooltip', panel.shaders[panel.shadersIndex].name);
             }
 
-            panel.updateReadonly(panel.$.shaderSelect);
+            updateElementReadonly.call(this, panel.$.shaderSelect);
         },
     },
     combinations: {
@@ -150,11 +177,9 @@ const Elements = {
                     const name = typeof value === 'boolean' ? (value ? 'on' : 'off') : value.toString();
 
                     const button = document.createElement('ui-button');
-                    content.appendChild(button);
-
-                    button.setAttribute('class', 'checktab');
+                    updateElementReadonly.call(panel, button);
+                    button.setAttribute('class', 'tab');
                     button.setAttribute('checked', checked);
-                    panel.updateReadonly(button);
                     button.innerText = name;
                     button.addEventListener('click', () => {
                         if (!panel.combinations[panel.shadersIndex][define.name]) {
@@ -172,9 +197,10 @@ const Elements = {
                             button.setAttribute('checked', 'true');
                         }
 
-                        panel.dataChange();
-                        panel.dispatch('change');
+                        panel.change();
                     });
+
+                    content.appendChild(button);
                 });
             });
 
@@ -186,6 +212,18 @@ const Elements = {
         },
     },
     codes: {
+        ready() {
+            const panel = this;
+
+            panel.glslNames = {
+                glsl3: 'GLSL 300 ES Output',
+                glsl1: 'GLSL 100 Output',
+            };
+            panel.shaderNames = {
+                vert: 'Vertex Shader',
+                frag: 'Fragment Shader',
+            };
+        },
         update() {
             const panel = this;
 
@@ -194,8 +232,9 @@ const Elements = {
             for (const glslKey in panel.glslNames) {
                 const section = document.createElement('ui-section');
                 panel.$.codes.appendChild(section);
-                section.setAttribute('class', 'config');
+                section.setAttribute('class', 'section');
                 section.setAttribute('expand', '');
+                section.setAttribute('cache-expand', `effect-${glslKey}`);
 
                 const glslName = panel.glslNames[glslKey];
 
@@ -245,50 +284,17 @@ const Elements = {
     },
 };
 
-/**
- * A method to initialize the panel
- */
-exports.ready = function () {
-    for (const prop in Elements) {
-        const element = Elements[prop];
-        if (element.ready) {
-            element.ready.call(this);
-        }
-    }
-};
-
-/**
- * Methods to automatically render components
- * @param assetList
- * @param metaList
- */
-exports.update = function (assetList, metaList) {
-    this.assetList = assetList;
-    this.metaList = metaList;
-    this.asset = assetList[0];
-    this.meta = metaList[0];
-
-    if (this.assetList.length !== 1) {
-        this.$.container.style.display = 'none';
-        return;
-    } else {
-        this.$.container.style.display = 'block';
-    }
-
-    const isLegal = this.refresh();
-    if (!isLegal) {
-        return;
-    }
-
-    for (const prop in Elements) {
-        const element = Elements[prop];
-        if (element.update) {
-            element.update.call(this);
-        }
-    }
-};
-
 exports.methods = {
+    record() {
+        return JSON.stringify({ shadersIndex: this.shadersIndex });
+    },
+    restore(record) {
+        record = JSON.parse(record);
+
+        this.$.shaderSelect.value = record.shadersIndex;
+        this.$.shaderSelect.dispatch('change');
+        return true;
+    },
     refresh() {
         const panel = this;
 
@@ -299,7 +305,7 @@ exports.methods = {
 
         const fileSource = panel.asset.library['.json'];
 
-        if (fileSource && !existsSync(fileSource)) {
+        if (!fileSource || !existsSync(fileSource)) {
             console.error('Read effect json file in library failed.');
             return false;
         }
@@ -312,16 +318,6 @@ exports.methods = {
         }
 
         panel.shaders = dataSource.shaders;
-
-        panel.shadersIndex = 0;
-        panel.glslNames = {
-            glsl3: 'GLSL 300 ES Output',
-            glsl1: 'GLSL 100 Output',
-        };
-        panel.shaderNames = {
-            vert: 'Vertex Shader',
-            frag: 'Fragment Shader',
-        };
 
         // The edited value of defines in each shader
         panel.combinations = [];
@@ -372,17 +368,7 @@ exports.methods = {
 
         return true;
     },
-    /**
-     * Update read-only status
-     */
-    updateReadonly(element) {
-        if (this.asset.readonly) {
-            element.setAttribute('disabled', true);
-        } else {
-            element.removeAttribute('disabled');
-        }
-    },
-    dataChange() {
+    change() {
         const panel = this;
 
         // Need to exclude empty arrays, otherwise scene will report an error
@@ -398,5 +384,43 @@ exports.methods = {
         });
 
         panel.meta.userData.combinations = submitData;
+
+        panel.dispatch('change');
+        panel.dispatch('snapshot');
     },
+};
+
+exports.ready = function() {
+    for (const prop in Elements) {
+        const element = Elements[prop];
+        if (element.ready) {
+            element.ready.call(this);
+        }
+    }
+};
+
+exports.update = function(assetList, metaList) {
+    this.assetList = assetList;
+    this.metaList = metaList;
+    this.asset = assetList[0];
+    this.meta = metaList[0];
+
+    if (assetList.length > 1) {
+        this.$.container.setAttribute('multiple-invalid', '');
+        return;
+    } else {
+        this.$.container.removeAttribute('multiple-invalid');
+    }
+
+    const isLegal = this.refresh();
+    if (!isLegal) {
+        return;
+    }
+
+    for (const prop in Elements) {
+        const element = Elements[prop];
+        if (element.update) {
+            element.update.call(this);
+        }
+    }
 };

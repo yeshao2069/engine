@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,28 +20,21 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
-/**
- * @packageDocumentation
- * @hidden
- */
-
-import { Vec3 } from '../../core/math';
+import { Vec3, RecyclePool, error, js, IVec3Like, geometry, IQuatLike, warnID, Color } from '../../core';
 import { PhysicsRayResult } from '../framework/physics-ray-result';
 import { BuiltinSharedBody } from './builtin-shared-body';
 import { BuiltinShape } from './shapes/builtin-shape';
 import { ArrayCollisionMatrix } from '../utils/array-collision-matrix';
-import { ObjectCollisionMatrix } from '../utils/object-collision-matrix';
-import { Ray, intersect } from '../../core/geometry';
-import { RecyclePool, Node, error } from '../../core';
 import { IPhysicsWorld, IRaycastOptions } from '../spec/i-physics-world';
-import { IVec3Like } from '../../core/math/type-define';
 import { PhysicsMaterial } from '../framework/assets/physics-material';
 import { TriggerEventType } from '../framework/physics-interface';
-import { Collider } from '../../../exports/physics-framework';
+import { Collider, EPhysicsDrawFlags } from '../../../exports/physics-framework';
 import { BuiltinRigidBody } from './builtin-rigid-body';
-import { fastRemoveAt } from '../../core/utils/array';
+import { Node } from '../../scene-graph';
+import { GeometryRenderer } from '../../rendering/geometry-renderer';
+import { director } from '../../game';
 
 const hitPoint = new Vec3();
 const TriggerEventObject = {
@@ -52,22 +44,123 @@ const TriggerEventObject = {
     impl: {} as any,
 };
 
+const aabbTemp = new geometry.AABB();
+const AABB_LINE_COUNT = 12;
+
 /**
  * Built-in collision system, intended for use as a
  * efficient discrete collision detector,
  * not a full physical simulator
  */
 export class BuiltInWorld implements IPhysicsWorld {
-    setGravity (v: IVec3Like) { }
-    setAllowSleep (v: boolean) { }
-    setDefaultMaterial (v: PhysicsMaterial) { }
-    get impl () { return this; }
+    sweepBox (
+        worldRay: geometry.Ray,
+        halfExtent: IVec3Like,
+        orientation: IQuatLike,
+        options: IRaycastOptions,
+        pool: RecyclePool<PhysicsRayResult>,
+        results: PhysicsRayResult[],
+    ): boolean {
+        warnID(9640);
+        return false;
+    }
+
+    sweepBoxClosest (
+        worldRay: geometry.Ray,
+        halfExtent: IVec3Like,
+        orientation: IQuatLike,
+        options: IRaycastOptions,
+        result: PhysicsRayResult,
+    ): boolean {
+        warnID(9640);
+        return false;
+    }
+
+    sweepSphere (
+        worldRay: geometry.Ray,
+        radius: number,
+        options: IRaycastOptions,
+        pool: RecyclePool<PhysicsRayResult>,
+        results: PhysicsRayResult[],
+    ): boolean {
+        warnID(9640);
+        return false;
+    }
+
+    sweepSphereClosest (
+        worldRay: geometry.Ray,
+        radius: number,
+        options: IRaycastOptions,
+        result: PhysicsRayResult,
+    ): boolean {
+        warnID(9640);
+        return false;
+    }
+
+    sweepCapsule (
+        worldRay: geometry.Ray,
+        radius: number,
+        height: number,
+        orientation: IQuatLike,
+        options: IRaycastOptions,
+        pool: RecyclePool<PhysicsRayResult>,
+        results: PhysicsRayResult[],
+    ): boolean {
+        warnID(9640);
+        return false;
+    }
+
+    sweepCapsuleClosest (
+        worldRay: geometry.Ray,
+        radius: number,
+        height: number,
+        orientation: IQuatLike,
+        options: IRaycastOptions,
+        result: PhysicsRayResult,
+    ): boolean {
+        warnID(9640);
+        return false;
+    }
+
+    setGravity (v: IVec3Like): void {
+        //empty
+    }
+    setAllowSleep (v: boolean): void {
+        //empty
+    }
+    setDefaultMaterial (v: PhysicsMaterial): void {
+        //empty
+    }
+    get impl (): BuiltInWorld { return this; }
     shapeArr: BuiltinShape[] = [];
     readonly bodies: BuiltinSharedBody[] = [];
 
     private _shapeArrPrev: BuiltinShape[] = [];
     private _collisionMatrix: ArrayCollisionMatrix = new ArrayCollisionMatrix();
     private _collisionMatrixPrev: ArrayCollisionMatrix = new ArrayCollisionMatrix();
+
+    private _debugLineCount = 0;
+    private _MAX_DEBUG_LINE_COUNT = 16384;
+    private _debugDrawFlags = EPhysicsDrawFlags.NONE;
+    private _debugConstraintSize = 0.3;
+    private _aabbColor = new Color(0, 255, 255, 255);
+    private _wireframeColor = new Color(255, 0, 255, 255);
+
+    get debugDrawFlags (): EPhysicsDrawFlags {
+        return this._debugDrawFlags;
+    }
+
+    set debugDrawFlags (v: EPhysicsDrawFlags) {
+        this._debugDrawFlags = v;
+    }
+
+    get debugDrawConstraintSize (): number {
+        return this._debugConstraintSize;
+    }
+
+    set debugDrawConstraintSize (v) {
+        this._debugConstraintSize = v;
+    }
 
     destroy (): void {
         if (this.bodies.length) error('You should destroy all physics component first.');
@@ -94,6 +187,8 @@ export class BuiltInWorld implements IPhysicsWorld {
                 bodyA.intersects(bodyB);
             }
         }
+
+        this._debugDraw();
     }
 
     syncSceneToPhysics (): void {
@@ -110,7 +205,7 @@ export class BuiltInWorld implements IPhysicsWorld {
         this.emitTriggerEvent();
     }
 
-    raycastClosest (worldRay: Ray, options: IRaycastOptions, out: PhysicsRayResult): boolean {
+    raycastClosest (worldRay: geometry.Ray, options: IRaycastOptions, out: PhysicsRayResult): boolean {
         let tmp_d = Infinity;
         const max_d = options.maxDistance;
         const mask = options.mask;
@@ -119,7 +214,7 @@ export class BuiltInWorld implements IPhysicsWorld {
             if (!(body.collisionFilterGroup & mask)) continue;
             for (let i = 0; i < body.shapes.length; i++) {
                 const shape = body.shapes[i];
-                const distance = intersect.resolve(worldRay, shape.worldShape);
+                const distance = geometry.intersect.resolve(worldRay, shape.worldShape);
                 if (distance === 0 || distance > max_d) {
                     continue;
                 }
@@ -135,7 +230,7 @@ export class BuiltInWorld implements IPhysicsWorld {
         return !(tmp_d === Infinity);
     }
 
-    raycast (worldRay: Ray, options: IRaycastOptions, pool: RecyclePool<PhysicsRayResult>, results: PhysicsRayResult[]): boolean {
+    raycast (worldRay: geometry.Ray, options: IRaycastOptions, pool: RecyclePool<PhysicsRayResult>, results: PhysicsRayResult[]): boolean {
         const max_d = options.maxDistance;
         const mask = options.mask;
         for (let i = 0; i < this.bodies.length; i++) {
@@ -143,7 +238,7 @@ export class BuiltInWorld implements IPhysicsWorld {
             if (!(body.collisionFilterGroup & mask)) continue;
             for (let i = 0; i < body.shapes.length; i++) {
                 const shape = body.shapes[i];
-                const distance = intersect.resolve(worldRay, shape.worldShape);
+                const distance = geometry.intersect.resolve(worldRay, shape.worldShape);
                 if (distance === 0 || distance > max_d) {
                     continue;
                 } else {
@@ -161,21 +256,21 @@ export class BuiltInWorld implements IPhysicsWorld {
         return BuiltinSharedBody.getSharedBody(node, this, wrappedBody);
     }
 
-    addSharedBody (body: BuiltinSharedBody) {
+    addSharedBody (body: BuiltinSharedBody): void {
         const index = this.bodies.indexOf(body);
         if (index < 0) {
             this.bodies.push(body);
         }
     }
 
-    removeSharedBody (body: BuiltinSharedBody) {
+    removeSharedBody (body: BuiltinSharedBody): void {
         const index = this.bodies.indexOf(body);
         if (index >= 0) {
-            fastRemoveAt(this.bodies, index);
+            js.array.fastRemoveAt(this.bodies, index);
         }
     }
 
-    private emitTriggerEvent () {
+    private emitTriggerEvent (): void {
         let shapeA: BuiltinShape;
         let shapeB: BuiltinShape;
         for (let i = 0; i < this.shapeArr.length; i += 2) {
@@ -238,5 +333,35 @@ export class BuiltInWorld implements IPhysicsWorld {
         this._collisionMatrixPrev.matrix = this._collisionMatrix.matrix;
         this._collisionMatrix.matrix = temp;
         this._collisionMatrix.reset();
+    }
+
+    private _getDebugRenderer (): GeometryRenderer|null {
+        const cameras = director.root!.mainWindow?.cameras;
+        if (!cameras) return null;
+        if (cameras.length === 0) return null;
+        if (!cameras[0]) return null;
+        cameras[0].initGeometryRenderer();
+
+        return cameras[0].geometryRenderer;
+    }
+
+    private _debugDraw (): void {
+        const debugRenderer = this._getDebugRenderer();
+        if (!debugRenderer) return;
+
+        this._debugLineCount = 0;
+        if (this._debugDrawFlags & EPhysicsDrawFlags.AABB) {
+            for (let i = 0; i < this.bodies.length; i++) {
+                const body = this.bodies[i];
+                for (let j = 0; j < body.shapes.length; j++) {
+                    const shape = body.shapes[j];
+                    if (this._debugLineCount + AABB_LINE_COUNT < this._MAX_DEBUG_LINE_COUNT) {
+                        this._debugLineCount += AABB_LINE_COUNT;
+                        shape.getAABB(aabbTemp);
+                        debugRenderer.addBoundingBox(aabbTemp, this._aabbColor);
+                    }
+                }
+            }
+        }
     }
 }

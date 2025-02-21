@@ -1,19 +1,18 @@
 /*
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -24,21 +23,18 @@
  THE SOFTWARE.
 */
 
-/**
- * @packageDocumentation
- * @module ui
- */
-
 import { ccclass, help, executionOrder, menu, requireComponent, tooltip, type, slide, range, serializable } from 'cc.decorator';
-import { EDITOR } from 'internal:constants';
-import { Component, EventHandler } from '../core/components';
+import { EDITOR, USE_XR } from 'internal:constants';
+import { Component, EventHandler } from '../scene-graph';
 import { UITransform } from '../2d/framework';
-import { EventTouch, SystemEventType, Touch } from '../core/platform';
+import { EventTouch, Touch } from '../input/types';
 import { Vec3 } from '../core/math';
 import { ccenum } from '../core/value-types/enum';
 import { clamp01 } from '../core/math/utils';
 import { Sprite } from '../2d/components/sprite';
 import { legacyCC } from '../core/global-exports';
+import { NodeEventType } from '../scene-graph/node-event';
+import { XrUIPressEvent, XrUIPressEventType } from '../xr/event/xr-event-handle';
 
 const _tempPos = new Vec3();
 /**
@@ -91,7 +87,7 @@ export class Slider extends Component {
      */
     @type(Sprite)
     @tooltip('i18n:slider.handle')
-    get handle () {
+    get handle (): Sprite | null {
         return this._handle;
     }
 
@@ -115,12 +111,12 @@ export class Slider extends Component {
      */
     @type(Direction)
     @tooltip('i18n:slider.direction')
-    get direction () {
+    get direction (): number {
         return this._direction;
     }
 
     set direction (value: number) {
-        if (this._direction === value) {
+        if ((this._direction as number) === value) {
             return;
         }
 
@@ -138,7 +134,7 @@ export class Slider extends Component {
     @slide
     @range([0, 1, 0.01])
     @tooltip('i18n:slider.progress')
-    get progress () {
+    get progress (): number {
         return this._progress;
     }
 
@@ -177,40 +173,66 @@ export class Slider extends Component {
     private _handleLocalPos = new Vec3();
     private _touchPos = new Vec3();
 
-    public __preload () {
+    constructor () {
+        super();
+    }
+
+    public __preload (): void {
         this._updateHandlePosition();
     }
 
     // 注册事件
 
-    public onEnable () {
-        this._updateHandlePosition();
+    public onEnable (): void {
+        const self = this;
+        const node = self.node;
+        const handle = self._handle;
+        self._updateHandlePosition();
 
-        this.node.on(SystemEventType.TOUCH_START, this._onTouchBegan, this);
-        this.node.on(SystemEventType.TOUCH_MOVE, this._onTouchMoved, this);
-        this.node.on(SystemEventType.TOUCH_END, this._onTouchEnded, this);
-        this.node.on(SystemEventType.TOUCH_CANCEL, this._onTouchCancelled, this);
-        if (this._handle && this._handle.isValid) {
-            this._handle.node.on(SystemEventType.TOUCH_START, this._onHandleDragStart, this);
-            this._handle.node.on(SystemEventType.TOUCH_MOVE, this._onTouchMoved, this);
-            this._handle.node.on(SystemEventType.TOUCH_END, this._onTouchEnded, this);
+        node.on(NodeEventType.TOUCH_START, self._onTouchBegan, self);
+        node.on(NodeEventType.TOUCH_MOVE, self._onTouchMoved, self);
+        node.on(NodeEventType.TOUCH_END, self._onTouchEnded, self);
+        node.on(NodeEventType.TOUCH_CANCEL, self._onTouchCancelled, self);
+
+        if (USE_XR) {
+            node.on(XrUIPressEventType.XRUI_HOVER_STAY, self._xrHoverStay, self);
+            node.on(XrUIPressEventType.XRUI_CLICK, self._xrClick, self);
+            node.on(XrUIPressEventType.XRUI_UNCLICK, self._xrUnClick, self);
+        }
+
+        if (handle && handle.isValid) {
+            const handleNode = handle.node;
+            handleNode.on(NodeEventType.TOUCH_START, self._onHandleDragStart, self);
+            handleNode.on(NodeEventType.TOUCH_MOVE, self._onTouchMoved, self);
+            handleNode.on(NodeEventType.TOUCH_END, self._onTouchEnded, self);
         }
     }
 
-    public onDisable () {
-        this.node.off(SystemEventType.TOUCH_START, this._onTouchBegan, this);
-        this.node.off(SystemEventType.TOUCH_MOVE, this._onTouchMoved, this);
-        this.node.off(SystemEventType.TOUCH_END, this._onTouchEnded, this);
-        this.node.off(SystemEventType.TOUCH_CANCEL, this._onTouchCancelled, this);
-        if (this._handle && this._handle.isValid) {
-            this._handle.node.off(SystemEventType.TOUCH_START, this._onHandleDragStart, this);
-            this._handle.node.off(SystemEventType.TOUCH_MOVE, this._onTouchMoved, this);
-            this._handle.node.off(SystemEventType.TOUCH_END, this._onTouchEnded, this);
+    public onDisable (): void {
+        const self = this;
+        const node = self.node;
+        const handle = self._handle;
+        node.off(NodeEventType.TOUCH_START, self._onTouchBegan, self);
+        node.off(NodeEventType.TOUCH_MOVE, self._onTouchMoved, self);
+        node.off(NodeEventType.TOUCH_END, self._onTouchEnded, self);
+        node.off(NodeEventType.TOUCH_CANCEL, self._onTouchCancelled, self);
+
+        if (USE_XR) {
+            node.off(XrUIPressEventType.XRUI_HOVER_STAY, self._xrHoverStay, self);
+            node.off(XrUIPressEventType.XRUI_CLICK, self._xrClick, self);
+            node.off(XrUIPressEventType.XRUI_UNCLICK, self._xrUnClick, self);
+        }
+
+        if (handle && handle.isValid) {
+            const handleNode = handle.node;
+            handleNode.off(NodeEventType.TOUCH_START, self._onHandleDragStart, self);
+            handleNode.off(NodeEventType.TOUCH_MOVE, self._onTouchMoved, self);
+            handleNode.off(NodeEventType.TOUCH_END, self._onTouchEnded, self);
         }
     }
 
-    protected _onHandleDragStart (event?: EventTouch) {
-        if (!event || !this._handle || !this._handle.node._uiProps.uiTransformComp) {
+    protected _onHandleDragStart (event?: EventTouch): void {
+        if (!event || !this._handle || !this._handle.node._getUITransformComp()) {
             return;
         }
 
@@ -218,12 +240,12 @@ export class Slider extends Component {
         this._touchHandle = true;
         const touhPos = event.touch!.getUILocation();
         Vec3.set(this._touchPos, touhPos.x, touhPos.y, 0);
-        this._handle.node._uiProps.uiTransformComp.convertToNodeSpaceAR(this._touchPos, this._offset);
+        this._handle.node._getUITransformComp()!.convertToNodeSpaceAR(this._touchPos, this._offset);
 
         event.propagationStopped = true;
     }
 
-    protected _onTouchBegan (event?: EventTouch) {
+    protected _onTouchBegan (event?: EventTouch): void {
         if (!this._handle || !event) {
             return;
         }
@@ -236,7 +258,7 @@ export class Slider extends Component {
         event.propagationStopped = true;
     }
 
-    protected _onTouchMoved (event?: EventTouch) {
+    protected _onTouchMoved (event?: EventTouch): void {
         if (!this._dragging || !event) {
             return;
         }
@@ -245,7 +267,7 @@ export class Slider extends Component {
         event.propagationStopped = true;
     }
 
-    protected _onTouchEnded (event?: EventTouch) {
+    protected _onTouchEnded (event?: EventTouch): void {
         this._dragging = false;
         this._touchHandle = false;
         this._offset = new Vec3();
@@ -255,45 +277,45 @@ export class Slider extends Component {
         }
     }
 
-    protected _onTouchCancelled (event?: EventTouch) {
+    protected _onTouchCancelled (event?: EventTouch): void {
         this._dragging = false;
         if (event) {
             event.propagationStopped = true;
         }
     }
 
-    protected _handleSliderLogic (touch: Touch | null) {
+    protected _handleSliderLogic (touch: Touch | null): void {
         this._updateProgress(touch);
         this._emitSlideEvent();
     }
 
-    protected _emitSlideEvent () {
+    protected _emitSlideEvent (): void {
         EventHandler.emitEvents(this.slideEvents, this);
         this.node.emit('slide', this);
     }
 
-    protected _updateProgress (touch: Touch | null) {
+    protected _updateProgress (touch: Touch | null): void {
         if (!this._handle || !touch) {
             return;
         }
 
         const touchPos = touch.getUILocation();
         Vec3.set(this._touchPos, touchPos.x, touchPos.y, 0);
-        const uiTrans = this.node._uiProps.uiTransformComp!;
+        const uiTrans = this.node._getUITransformComp()!;
         const localTouchPos = uiTrans.convertToNodeSpaceAR(this._touchPos, _tempPos);
-        if (this.direction === Direction.Horizontal) {
+        if (this.direction === Direction.Horizontal as number) {
             this.progress = clamp01(0.5 + (localTouchPos.x - this._offset.x) / uiTrans.width);
         } else {
             this.progress = clamp01(0.5 + (localTouchPos.y - this._offset.y) / uiTrans.height);
         }
     }
 
-    protected _updateHandlePosition () {
+    protected _updateHandlePosition (): void {
         if (!this._handle) {
             return;
         }
-        this._handleLocalPos.set(this._handle.node.getPosition());
-        const uiTrans = this.node._uiProps.uiTransformComp!;
+        this._handleLocalPos.set(this._handle.node.position);
+        const uiTrans = this.node._getUITransformComp()!;
         if (this._direction === Direction.Horizontal) {
             this._handleLocalPos.x = -uiTrans.width * uiTrans.anchorX + this.progress * uiTrans.width;
         } else {
@@ -303,8 +325,8 @@ export class Slider extends Component {
         this._handle.node.setPosition(this._handleLocalPos);
     }
 
-    private _changeLayout () {
-        const uiTrans = this.node._uiProps.uiTransformComp!;
+    private _changeLayout (): void {
+        const uiTrans = this.node._getUITransformComp()!;
         const contentSize = uiTrans.contentSize;
         uiTrans.setContentSize(contentSize.height, contentSize.width);
         if (this._handle) {
@@ -318,6 +340,45 @@ export class Slider extends Component {
             this._updateHandlePosition();
         }
     }
+
+    protected _xrHandleProgress (point: Vec3): void {
+        if (!USE_XR) return;
+        if (!this._touchHandle) {
+            const uiTrans = this.node._getUITransformComp()!;
+            uiTrans.convertToNodeSpaceAR(point, _tempPos);
+            if (this.direction === Direction.Horizontal as number) {
+                this.progress = clamp01(0.5 + (_tempPos.x - this.node.position.x) / uiTrans.width);
+            } else {
+                this.progress = clamp01(0.5 + (_tempPos.y - this.node.position.y) / uiTrans.height);
+            }
+        }
+    }
+
+    protected _xrClick (event: XrUIPressEvent): void {
+        if (!USE_XR) return;
+        if (!this._handle) {
+            return;
+        }
+        this._dragging = true;
+        this._xrHandleProgress(event.hitPoint);
+        this._emitSlideEvent();
+    }
+
+    protected _xrUnClick (): void {
+        if (!USE_XR) return;
+        this._dragging = false;
+        this._touchHandle = false;
+    }
+
+    protected _xrHoverStay (event: XrUIPressEvent): void {
+        if (!USE_XR) return;
+        if (!this._dragging) {
+            return;
+        }
+
+        this._xrHandleProgress(event.hitPoint);
+        this._emitSlideEvent();
+    }
 }
 
 /**
@@ -327,3 +388,5 @@ export class Slider extends Component {
  * @param {Event.EventCustom} event
  * @param {Slider} slider - The slider component.
  */
+
+legacyCC.Slider = Slider;

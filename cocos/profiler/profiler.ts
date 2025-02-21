@@ -1,19 +1,18 @@
 /*
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -24,21 +23,24 @@
  THE SOFTWARE.
 */
 
-import { TEST, EDITOR } from 'internal:constants';
+import { TEST, USE_XR } from 'internal:constants';
 import { MeshRenderer } from '../3d/framework/mesh-renderer';
-import { Camera } from '../core/components/camera-component';
 import { createMesh } from '../3d/misc';
-import { Material } from '../core/assets/material';
-import { ClearFlagBit, Format, TextureType, TextureUsageBit, Texture, TextureInfo, Device, BufferTextureCopy } from '../core/gfx';
-import { Layers } from '../core/scene-graph';
-import { Node } from '../core/scene-graph/node';
+import { Material } from '../asset/assets/material';
+import { Format, TextureType, TextureUsageBit, Texture, TextureInfo, Device, BufferTextureCopy, Swapchain, deviceManager } from '../gfx';
+import { Layers } from '../scene-graph';
+import { Node } from '../scene-graph/node';
 import { ICounterOption } from './counter';
 import { PerfCounter } from './perf-counter';
-import { legacyCC } from '../core/global-exports';
-import { Pass } from '../core/renderer';
-import { preTransforms } from '../core/math/mat4';
+import { Pass } from '../render-scene';
+import { preTransforms, System, sys, cclegacy, settings, warnID, SettingsCategory, CCObjectFlags } from '../core';
+import { Root } from '../root';
+import { director, DirectorEvent, game } from '../game';
+import { ccwindow } from '../core/global-exports';
 
 const _characters = '0123456789. ';
+
+const _average = 500;
 
 const _string2offset = {
     0: 0,
@@ -63,19 +65,21 @@ interface IProfilerState {
     logic: ICounterOption;
     physics: ICounterOption;
     render: ICounterOption;
+    present: ICounterOption;
     textureMemory: ICounterOption;
     bufferMemory: ICounterOption;
 }
 
 const _profileInfo = {
-    fps: { desc: 'Framerate (FPS)', below: 30, average: 500, isInteger: true },
+    fps: { desc: `Framerate (FPS)`, below: 30, average: _average, isInteger: true },
     draws: { desc: 'Draw call', isInteger: true },
-    frame: { desc: 'Frame time (ms)', min: 0, max: 50, average: 500 },
+    frame: { desc: 'Frame time (ms)', min: 0, max: 50, average: _average },
     instances: { desc: 'Instance Count', isInteger: true },
     tricount: { desc: 'Triangle', isInteger: true },
-    logic: { desc: 'Game Logic (ms)', min: 0, max: 50, average: 500, color: '#080' },
-    physics: { desc: 'Physics (ms)', min: 0, max: 50, average: 500 },
-    render: { desc: 'Renderer (ms)', min: 0, max: 50, average: 500, color: '#f90' },
+    logic: { desc: 'Game Logic (ms)', min: 0, max: 50, average: _average, color: '#080' },
+    physics: { desc: 'Physics (ms)', min: 0, max: 50, average: _average },
+    render: { desc: 'Renderer (ms)', min: 0, max: 50, average: _average, color: '#f90' },
+    present: { desc: 'Present (ms)', min: 0, max: 50, average: _average, color: '#f90' },
     textureMemory: { desc: 'GFX Texture Mem(M)' },
     bufferMemory: { desc: 'GFX Buffer Mem(M)' },
 };
@@ -84,18 +88,18 @@ const _constants = {
     fontSize: 23,
     quadHeight: 0.4,
     segmentsPerLine: 8,
-    textureWidth: 256,
-    textureHeight: 256,
+    textureWidth: 280,
+    textureHeight: 280,
 };
 
-export class Profiler {
-    public _stats: IProfilerState | null = null;
-    public id = '__Profiler__';
-
+export class Profiler extends System {
+    private _profilerStats: IProfilerState | null = null;
     private _showFPS = false;
 
     private _rootNode: Node | null = null;
     private _device: Device | null = null;
+    private _swapchain: Swapchain | null = null;
+    private _meshRenderer: MeshRenderer = null!;
     private readonly _canvas: HTMLCanvasElement | null = null;
     private readonly _ctx: CanvasRenderingContext2D | null = null;
     private _texture: Texture | null = null;
@@ -110,7 +114,7 @@ export class Profiler {
     private _statsDone = false;
     private _inited = false;
 
-    private readonly _lineHeight = _constants.textureHeight / (Object.keys(_profileInfo).length + 1);
+    private _lineHeight = _constants.textureHeight / (Object.keys(_profileInfo).length + 1);
     private _wordHeight = 0;
     private _eachNumWidth = 0;
     private _totalLines = 0; // total lines to display
@@ -118,83 +122,115 @@ export class Profiler {
     private lastTime = 0;   // update use time
 
     constructor () {
+        super();
         if (!TEST) {
-            this._canvas = document.createElement('canvas');
+            this._canvas = ccwindow.document.createElement('canvas');
             this._ctx = this._canvas.getContext('2d')!;
             this._canvasArr.push(this._canvas);
         }
     }
 
-    public isShowingStats () {
+    init (): void {
+        const showFPS = !!settings.querySettings(SettingsCategory.PROFILING, 'showFPS');
+        if (showFPS) {
+            this.showStats();
+        } else {
+            this.hideStats();
+        }
+    }
+
+    /**
+     * @deprecated We have removed this private interface in version 3.8, please use the public interface get stats instead.
+     */
+    public get _stats (): IProfilerState | null {
+        warnID(16381);
+        return this._profilerStats;
+    }
+
+    /**
+     * @zh 获取引擎运行性能状态
+     * @en Get engine performance status
+     */
+    public get stats (): IProfilerState | null {
+        return this._profilerStats;
+    }
+
+    public isShowingStats (): boolean {
         return this._showFPS;
     }
 
-    public hideStats () {
+    public hideStats (): void {
         if (this._showFPS) {
             if (this._rootNode) {
                 this._rootNode.active = false;
             }
 
-            legacyCC.game.off(legacyCC.Game.EVENT_RESTART, this.generateNode, this);
-            legacyCC.director.off(legacyCC.Director.EVENT_BEFORE_UPDATE, this.beforeUpdate, this);
-            legacyCC.director.off(legacyCC.Director.EVENT_AFTER_UPDATE, this.afterUpdate, this);
-            legacyCC.director.off(legacyCC.Director.EVENT_BEFORE_PHYSICS, this.beforePhysics, this);
-            legacyCC.director.off(legacyCC.Director.EVENT_AFTER_PHYSICS, this.afterPhysics, this);
-            legacyCC.director.off(legacyCC.Director.EVENT_BEFORE_DRAW, this.beforeDraw, this);
-            legacyCC.director.off(legacyCC.Director.EVENT_AFTER_DRAW, this.afterDraw, this);
+            director.off(DirectorEvent.BEFORE_UPDATE, this.beforeUpdate, this);
+            director.off(DirectorEvent.AFTER_UPDATE, this.afterUpdate, this);
+            director.off(DirectorEvent.BEFORE_PHYSICS, this.beforePhysics, this);
+            director.off(DirectorEvent.AFTER_PHYSICS, this.afterPhysics, this);
+            director.off(DirectorEvent.BEFORE_DRAW, this.beforeDraw, this);
+            director.off(DirectorEvent.AFTER_RENDER, this.afterRender, this);
+            director.off(DirectorEvent.AFTER_DRAW, this.afterPresent, this);
             this._showFPS = false;
+            director.root!.pipeline.profiler = null;
+            cclegacy.game.config.showFPS = false;
         }
     }
 
-    public showStats () {
+    public showStats (): void {
         if (!this._showFPS) {
-            if (!this._device) { this._device = legacyCC.director.root.device; }
-            if (!EDITOR) {
-                this.generateCanvas();
+            if (!this._device) {
+                const root = cclegacy.director.root as Root;
+                this._device = deviceManager.gfxDevice;
+                this._swapchain = root.mainWindow!.swapchain;
             }
+
+            this.generateCanvas();
             this.generateStats();
-            if (!EDITOR) {
-                legacyCC.game.once(legacyCC.Game.EVENT_ENGINE_INITED, this.generateNode, this);
-                legacyCC.game.on(legacyCC.Game.EVENT_RESTART, this.generateNode, this);
-            } else {
-                this._inited = true;
-            }
+            cclegacy.game.once(cclegacy.Game.EVENT_ENGINE_INITED, this.generateNode, this);
+            cclegacy.game.on(cclegacy.Game.EVENT_RESTART, this.generateNode, this);
+
             if (this._rootNode) {
                 this._rootNode.active = true;
             }
 
-            legacyCC.director.on(legacyCC.Director.EVENT_BEFORE_UPDATE, this.beforeUpdate, this);
-            legacyCC.director.on(legacyCC.Director.EVENT_AFTER_UPDATE, this.afterUpdate, this);
-            legacyCC.director.on(legacyCC.Director.EVENT_BEFORE_PHYSICS, this.beforePhysics, this);
-            legacyCC.director.on(legacyCC.Director.EVENT_AFTER_PHYSICS, this.afterPhysics, this);
-            legacyCC.director.on(legacyCC.Director.EVENT_BEFORE_DRAW, this.beforeDraw, this);
-            legacyCC.director.on(legacyCC.Director.EVENT_AFTER_DRAW, this.afterDraw, this);
+            director.on(DirectorEvent.BEFORE_UPDATE, this.beforeUpdate, this);
+            director.on(DirectorEvent.AFTER_UPDATE, this.afterUpdate, this);
+            director.on(DirectorEvent.BEFORE_PHYSICS, this.beforePhysics, this);
+            director.on(DirectorEvent.AFTER_PHYSICS, this.afterPhysics, this);
+            director.on(DirectorEvent.BEFORE_DRAW, this.beforeDraw, this);
+            director.on(DirectorEvent.AFTER_RENDER, this.afterRender, this);
+            director.on(DirectorEvent.AFTER_DRAW, this.afterPresent, this);
 
             this._showFPS = true;
             this._canvasDone = true;
             this._statsDone = true;
+            cclegacy.game.config.showFPS = true;
         }
     }
 
-    public generateCanvas () {
+    public generateCanvas (): void {
         if (this._canvasDone) {
             return;
         }
 
         const { textureWidth, textureHeight } = _constants;
+        const canvas = this._canvas;
+        const ctx = this._ctx;
 
-        if (!this._ctx || !this._canvas) {
+        if (!ctx || !canvas) {
             return;
         }
 
-        this._canvas.width = textureWidth;
-        this._canvas.height = textureHeight;
-        this._canvas.style.width = `${this._canvas.width}`;
-        this._canvas.style.height = `${this._canvas.height}`;
+        canvas.width = textureWidth;
+        canvas.height = textureHeight;
+        canvas.style.width = `${canvas.width}`;
+        canvas.style.height = `${canvas.height}`;
 
-        this._ctx.font = `${_constants.fontSize}px Arial`;
-        this._ctx.textBaseline = 'top';
-        this._ctx.fillStyle = '#fff';
+        ctx.font = `${_constants.fontSize}px Arial`;
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = '#fff';
 
         this._texture = this._device!.createTexture(new TextureInfo(
             TextureType.TEX2D,
@@ -204,63 +240,51 @@ export class Profiler {
             textureHeight,
         ));
 
-        this._region.texExtent.width = textureWidth;
-        this._region.texExtent.height = textureHeight;
+        const texExtent = this._region.texExtent;
+        texExtent.width = textureWidth;
+        texExtent.height = textureHeight;
     }
 
-    public generateStats () {
+    public generateStats (): void {
         if (this._statsDone || !this._ctx || !this._canvas) {
             return;
         }
 
-        this._stats = null;
+        this._profilerStats = null;
         const now = performance.now();
 
         this._ctx.textAlign = 'left';
         let i = 0;
         for (const id in _profileInfo) {
-            const element = _profileInfo[id];
-            if (!EDITOR) this._ctx.fillText(element.desc, 0, i * this._lineHeight);
+            const element = _profileInfo[id] as ICounterOption;
+            this._ctx.fillText(element.desc, 0, i * this._lineHeight);
             element.counter = new PerfCounter(id, element, now);
             i++;
         }
         this._totalLines = i;
         this._wordHeight = this._totalLines * this._lineHeight / this._canvas.height;
-        if (!EDITOR) {
-            for (let j = 0; j < _characters.length; ++j) {
-                const offset = this._ctx.measureText(_characters[j]).width;
-                this._eachNumWidth = Math.max(this._eachNumWidth, offset);
-            }
-            for (let j = 0; j < _characters.length; ++j) {
-                this._ctx.fillText(_characters[j], j * this._eachNumWidth, this._totalLines * this._lineHeight);
-            }
+        for (let j = 0; j < _characters.length; ++j) {
+            const offset = this._ctx.measureText(_characters[j]).width;
+            this._eachNumWidth = Math.max(this._eachNumWidth, offset);
+        }
+        for (let j = 0; j < _characters.length; ++j) {
+            this._ctx.fillText(_characters[j], j * this._eachNumWidth, this._totalLines * this._lineHeight);
         }
         this._eachNumWidth /= this._canvas.width;
 
-        this._stats = _profileInfo as IProfilerState;
+        this._profilerStats = _profileInfo as IProfilerState;
         this._canvasArr[0] = this._canvas;
-        if (!EDITOR) this._device!.copyTexImagesToTexture(this._canvasArr, this._texture!, this._regionArr);
+        this._device!.copyTexImagesToTexture(this._canvasArr, this._texture!, this._regionArr);
     }
 
-    public generateNode () {
+    public generateNode (): void {
         if (this._rootNode && this._rootNode.isValid) {
             return;
         }
 
         this._rootNode = new Node('PROFILER_NODE');
-        legacyCC.game.addPersistRootNode(this._rootNode);
-
-        const cameraNode = new Node('Profiler_Camera');
-        cameraNode.setPosition(0, 0, 1.5);
-        cameraNode.parent = this._rootNode;
-        const camera = cameraNode.addComponent('cc.Camera') as Camera;
-        camera.projection = Camera.ProjectionType.ORTHO;
-        camera.orthoHeight = 1;
-        camera.near = 1;
-        camera.far = 2;
-        camera.visibility = Layers.BitMask.PROFILER;
-        camera.clearFlags = ClearFlagBit.NONE;
-        camera.priority = 0xffffffff; // after everything else
+        this._rootNode._objFlags = CCObjectFlags.DontSave | CCObjectFlags.HideInHierarchy;
+        game.addPersistRootNode(this._rootNode);
 
         const managerNode = new Node('Profiler_Root');
         managerNode.parent = this._rootNode;
@@ -271,10 +295,10 @@ export class Profiler {
         const scale = rowHeight / _constants.fontSize;
         const columnWidth = this._eachNumWidth * this._canvas!.width * scale;
         const vertexPos: number[] = [
-            0, height, 0, // top-left
+            0,      height, 0, // top-left
             lWidth, height, 0, // top-right
             lWidth,      0, 0, // bottom-right
-            0,      0, 0, // bottom-left
+            0,           0, 0, // bottom-left
         ];
         const vertexindices: number[] = [
             0, 2, 1,
@@ -305,15 +329,15 @@ export class Profiler {
             }
         }
 
-        const modelCom = managerNode.addComponent(MeshRenderer);
-        modelCom.mesh = createMesh({
+        this._meshRenderer = managerNode.addComponent(MeshRenderer);
+        this._meshRenderer.mesh = createMesh({
             positions: vertexPos,
             indices: vertexindices,
             colors: vertexUV, // pack all the necessary info in a_color: { x: u, y: v, z: id.x, w: id.y }
         });
 
         const _material = new Material();
-        _material.initialize({ effectName: 'profiler' });
+        _material.initialize({ effectName: 'util/profiler' });
 
         const pass = this.pass = _material.passes[0];
         const hTexture = pass.getBinding('mainTexture');
@@ -324,118 +348,133 @@ export class Profiler {
         this.offsetData = pass.blocks[bOffset];
         this.offsetData[3] = -1; // ensure init on the first frame
 
-        modelCom.material = _material;
-        modelCom.node.layer = Layers.Enum.PROFILER;
+        this._meshRenderer.material = _material;
+        this._meshRenderer.node.layer = Layers.Enum.PROFILER;
+
         this._inited = true;
     }
 
-    public beforeUpdate () {
-        if (!this._stats) {
+    public beforeUpdate (): void {
+        if (!this._profilerStats) {
             return;
         }
 
         const now = performance.now();
-        (this._stats.frame.counter as PerfCounter).end(now);
-        (this._stats.frame.counter as PerfCounter).start(now);
-        (this._stats.logic.counter as PerfCounter).start(now);
+        (this._profilerStats.frame.counter as PerfCounter).start(now);
+        (this._profilerStats.logic.counter as PerfCounter).start(now);
     }
 
-    public afterUpdate () {
-        if (!this._stats) {
+    public afterUpdate (): void {
+        if (!this._profilerStats) {
             return;
         }
 
         const now = performance.now();
-        if (legacyCC.director.isPaused()) {
-            (this._stats.frame.counter as PerfCounter).start(now);
+        if (director.isPaused()) {
+            (this._profilerStats.frame.counter as PerfCounter).start(now);
         } else {
-            (this._stats.logic.counter as PerfCounter).end(now);
+            (this._profilerStats.logic.counter as PerfCounter).end(now);
         }
     }
 
-    public beforePhysics () {
-        if (!this._stats) {
+    public beforePhysics (): void {
+        if (!this._profilerStats) {
             return;
         }
 
         const now = performance.now();
-        (this._stats.physics.counter as PerfCounter).start(now);
+        (this._profilerStats.physics.counter as PerfCounter).start(now);
     }
 
-    public afterPhysics () {
-        if (!this._stats) {
+    public afterPhysics (): void {
+        if (!this._profilerStats) {
             return;
         }
 
         const now = performance.now();
-        (this._stats.physics.counter as PerfCounter).end(now);
+        (this._profilerStats.physics.counter as PerfCounter).end(now);
     }
 
-    public beforeDraw () {
-        if (!this._stats) {
+    public beforeDraw (): void {
+        if (!this._profilerStats || !this._inited) {
             return;
         }
 
-        if (!EDITOR) {
-            const surfaceTransform = this._device!.surfaceTransform;
-            const clipSpaceSignY = this._device!.capabilities.clipSpaceSignY;
-            if (surfaceTransform !== this.offsetData[3]) {
-                const preTransform = preTransforms[surfaceTransform];
-                const x = -0.9; const y = -0.9 * clipSpaceSignY;
-                this.offsetData[0] = x * preTransform[0] + y * preTransform[2];
-                this.offsetData[1] = x * preTransform[1] + y * preTransform[3];
-                this.offsetData[2] = this._eachNumWidth;
-                this.offsetData[3] = surfaceTransform;
+        const surfaceTransform = this._swapchain!.surfaceTransform;
+        const clipSpaceSignY = this._device!.capabilities.clipSpaceSignY;
+        if (surfaceTransform !== this.offsetData[3]) {
+            const preTransform = preTransforms[surfaceTransform];
+            let x = -0.9; let y = -0.9 * clipSpaceSignY;
+            if (USE_XR && sys.isXR) {
+                x = -0.5; y = -0.5 * clipSpaceSignY;
             }
+            this.offsetData[0] = x * preTransform[0] + y * preTransform[2];
+            this.offsetData[1] = x * preTransform[1] + y * preTransform[3];
+            this.offsetData[2] = this._eachNumWidth;
+            this.offsetData[3] = surfaceTransform;
+        }
 
-            // @ts-expect-error using private members for efficiency
-            this.pass._rootBufferDirty = true;
+        this.pass.setRootBufferDirty(true);
+
+        if (this._meshRenderer.model) {
+            director.root!.pipeline.profiler = this._meshRenderer.model;
+        } else {
+            director.root!.pipeline.profiler = null;
         }
 
         const now = performance.now();
-        (this._stats.render.counter as PerfCounter).start(now);
+        (this._profilerStats.render.counter as PerfCounter).start(now);
     }
 
-    public afterDraw () {
-        if (!this._stats || !this._inited) {
+    public afterRender (): void {
+        if (!this._profilerStats || !this._inited) {
             return;
         }
         const now = performance.now();
+        (this._profilerStats.render.counter as PerfCounter).end(now);
+        (this._profilerStats.present.counter as PerfCounter).start(now);
+    }
 
-        (this._stats.fps.counter as PerfCounter).frame(now);
-        (this._stats.render.counter as PerfCounter).end(now);
+    public afterPresent (): void {
+        if (!this._profilerStats || !this._inited) {
+            return;
+        }
 
-        if (now - this.lastTime < 500) {
+        const now = performance.now();
+        (this._profilerStats.frame.counter as PerfCounter).end(now);
+        (this._profilerStats.fps.counter as PerfCounter).frame(now);
+        (this._profilerStats.present.counter as PerfCounter).end(now);
+
+        if (now - this.lastTime < _average) {
             return;
         }
         this.lastTime = now;
 
         const device = this._device!;
-        (this._stats.draws.counter as PerfCounter).value = device.numDrawCalls;
-        (this._stats.instances.counter as PerfCounter).value = device.numInstances;
-        (this._stats.bufferMemory.counter as PerfCounter).value = device.memoryStatus.bufferSize / (1024 * 1024);
-        (this._stats.textureMemory.counter as PerfCounter).value = device.memoryStatus.textureSize / (1024 * 1024);
-        (this._stats.tricount.counter as PerfCounter).value = device.numTris;
+        (this._profilerStats.draws.counter as PerfCounter).value = device.numDrawCalls;
+        (this._profilerStats.instances.counter as PerfCounter).value = device.numInstances;
+        (this._profilerStats.bufferMemory.counter as PerfCounter).value = device.memoryStatus.bufferSize / (1024 * 1024);
+        (this._profilerStats.textureMemory.counter as PerfCounter).value = device.memoryStatus.textureSize / (1024 * 1024);
+        (this._profilerStats.tricount.counter as PerfCounter).value = device.numTris;
 
         let i = 0;
-        if (!EDITOR) {
-            const view = this.digitsData;
-            for (const id in this._stats) {
-                const stat = this._stats[id] as ICounterOption;
-                stat.counter.sample(now);
-                const result = stat.counter.human().toString();
-                for (let j = _constants.segmentsPerLine - 1; j >= 0; j--) {
-                    const index = i * _constants.segmentsPerLine + j;
-                    const character = result[result.length - (_constants.segmentsPerLine - j)];
-                    let offset = _string2offset[character];
-                    if (offset === undefined) { offset = 11; }
-                    view[index] = offset;
-                }
-                i++;
+        const view = this.digitsData;
+        for (const id in this._profilerStats) {
+            const stat = this._profilerStats[id] as ICounterOption;
+            stat.counter.sample(now);
+            const result = stat.counter.human().toString();
+            for (let j = _constants.segmentsPerLine - 1; j >= 0; j--) {
+                const index = i * _constants.segmentsPerLine + j;
+                const character = result[result.length - (_constants.segmentsPerLine - j)];
+                let offset = _string2offset[character];
+                if (offset === undefined) { offset = 11; }
+                view[index] = offset;
             }
+            i++;
         }
     }
 }
 
 export const profiler = new Profiler();
-legacyCC.profiler = profiler;
+director.registerSystem('profiler', profiler, 0);
+cclegacy.profiler = profiler;

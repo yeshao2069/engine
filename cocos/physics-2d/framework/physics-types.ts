@@ -1,7 +1,26 @@
-/**
- * @packageDocumentation
- * @module physics2d
- */
+/*
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
+
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+*/
 
 import { Enum, Vec2 } from '../../core';
 import { Collider2D } from './components/colliders/collider-2d';
@@ -59,17 +78,26 @@ export enum EJoint2DType {
 }
 Enum(EJoint2DType);
 
+export enum PhysicsGroup2D {
+    DEFAULT = 1,
+}
+Enum(PhysicsGroup2D);
+
+// To keep the compatibility, don't use it internally, otherwise, enum value may be inlined to wrong value.
+// Use PhysicsGroup2D instead.
+export const PhysicsGroup = PhysicsGroup2D;
+
 /**
  * @en Enum for ERaycast2DType.
- * @zh 射线检测类型
- * @enum ERaycast2DType
+ * @zh 射线检测类型。
+ * @enum ERaycast2DType.
  */
 export enum ERaycast2DType {
     /**
      * @en
      * Detects closest collider on the raycast path.
      * @zh
-     * 检测射线路径上最近的碰撞体
+     * 检测射线路径上最近的碰撞体。
      */
     Closest,
     /**

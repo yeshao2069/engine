@@ -1,27 +1,41 @@
 'use strict';
 
-exports.style = `
-:host > .section { height: 200px; display: flex; }
-:host > .section > canvas { flex: 1; min-width: 0; }
-:host > .section > .tools { display: flex; flex-direction: column; padding: 6px 4px; }
-`;
+const previewParams = {
+    shape: 'sphere',
+    light: true,
+};
 
-exports.template = `
+exports.template = /* html */`
 <div class="section">
-    <canvas></canvas>
     <div class="tools">
-        <ui-select value="box" class="primitive">
-            <option>box</option>
+        <ui-select class="primitive">
             <option>sphere</option>
+            <option>box</option>
             <option>capsule</option>
             <option>cylinder</option>
             <option>torus</option>
             <option>cone</option>
             <option>quad</option>
         </ui-select>
-        <ui-checkbox checked>Light</ui-checkbox>
+        <ui-checkbox>Light</ui-checkbox>
     </div>
+    <canvas></canvas>
 </div>
+`;
+
+exports.style = /* css */`
+:host > .section {
+    display: flex;
+    flex-direction: column;
+    height: var(--inspector-header-preview-height, 200px);
+    padding: 4px;
+    box-sizing: border-box;
+    background: var(--color-normal-fill);
+}
+:host > .section > canvas { flex: 1; max-height: 100%; aspect-ratio: auto; }
+:host > .section > .tools { display: flex; margin-bottom: 4px; }
+:host > .section > .tools > ui-select { flex: 1; }
+:host > .section > .tools > ui-checkbox { margin-left: 4px; }
 `;
 
 exports.$ = {
@@ -31,9 +45,13 @@ exports.$ = {
     light: 'ui-checkbox',
 };
 
+async function callMaterialPreviewFunction(funcName, ...args) {
+    return await Editor.Message.request('scene', 'call-preview-function', 'scene:material-preview', funcName, ...args);
+}
+
 exports.methods = {
-    hideAllContent (hide) {
-        this.$.container.style= hide ? 'display:none' : '';
+    hideAllContent(hide) {
+        this.$.container.style = hide ? 'display:none' : '';
     },
     async refreshPreview() {
         const panel = this;
@@ -43,9 +61,7 @@ exports.methods = {
             return;
         }
 
-        if (panel.isPreviewDataDirty) {
-            panel.isPreviewDataDirty = false;
-
+        const doDraw = async function() {
             try {
                 const canvas = panel.$.canvas;
 
@@ -56,82 +72,70 @@ exports.methods = {
                     canvas.width = width;
                     canvas.height = height;
 
-                    panel.glPreview.initGL(canvas, { width, height });
-                    panel.glPreview.resizeGL(width, height);
+                    await panel.glPreview.initGL(canvas, { width, height });
+                    await panel.glPreview.resizeGL(width, height);
                 }
                 const info = await panel.glPreview.queryPreviewData({
                     width,
                     height,
                 });
-                panel.glPreview.drawGL(info.buffer, info.width, info.height);
+                panel.glPreview.drawGL(info);
             } catch (e) {
                 console.warn(e);
             }
-        }
+        };
 
-        cancelAnimationFrame(panel.animationId);
-        panel.animationId = requestAnimationFrame(() => {
-            panel.refreshPreview();
+        requestAnimationFrame(async () => {
+            await doDraw();
+            panel.isPreviewDataDirty = false;
         });
     },
     updatePreviewDataDirty() {
         const panel = this;
 
         panel.isPreviewDataDirty = true;
-    }
+    },
 };
 
-/**
- * Methods for automatic rendering of components
- * @param assetList
- * @param metaList
- */
-exports.update = async function (assetList, metaList) {
+exports.ready = async function() {
     const panel = this;
 
-    panel.assetList = assetList;
-    panel.metaList = metaList;
-    panel.asset = assetList[0];
-    panel.meta = metaList[0];
-    const notOnlyOne = assetList.length !== 1;
-    this.hideAllContent(notOnlyOne);
-    if (notOnlyOne) {
-        return;
-    }
-    if (!panel.$.canvas) {
-        return;
-    }
+    let _isPreviewDataDirty = false;
+    Object.defineProperty(panel, 'isPreviewDataDirty', {
+        get() {
+            return _isPreviewDataDirty;
+        },
+        set(value) {
+            if (value !== _isPreviewDataDirty) {
+                _isPreviewDataDirty = value;
+                value && panel.refreshPreview();
+            }
+        },
+    });
 
-    await panel.glPreview.init({ width: this.$.canvas.clientWidth, height: this.$.canvas.clientHeight });
-    await Editor.Message.request('scene', 'preview-material', this.asset.uuid);
+    callMaterialPreviewFunction('resetCamera');
 
-    panel.isPreviewDataDirty = true;
-    panel.refreshPreview();
-};
-
-/**
- * Method of initializing the panel
- */
-exports.ready = async function () {
-    const panel = this;
-
-    Editor.Message.request('scene', 'set-material-preview-light-enable', true);
-    panel.$.light.addEventListener('confirm', async () => {
-        await Editor.Message.request('scene', 'set-material-preview-light-enable', this.$.light.checked);
+    panel.$.light.value = previewParams.light;
+    callMaterialPreviewFunction('setLightEnable', previewParams.light);
+    panel.$.light.addEventListener('confirm', async (event) => {
+        previewParams.light = event.target.value;
+        await callMaterialPreviewFunction('setLightEnable', previewParams.light);
         panel.isPreviewDataDirty = true;
     });
 
-    Editor.Message.request('scene', 'set-material-preview-primitive', 'box');
-    panel.$.primitive.addEventListener('confirm', async () => {
-        await Editor.Message.request('scene', 'set-material-preview-primitive', this.$.primitive.value);
+    panel.$.primitive.value = previewParams.shape;
+    callMaterialPreviewFunction('setPrimitive', previewParams.shape);
+    panel.$.primitive.addEventListener('confirm', async (event) => {
+        previewParams.shape = event.target.value;
+        await callMaterialPreviewFunction('setPrimitive', previewParams.shape);
         panel.isPreviewDataDirty = true;
     });
 
     panel.$.canvas.addEventListener('mousedown', async (event) => {
-        await Editor.Message.request('scene', 'on-material-preview-mouse-down', { x: event.x, y: event.y });
+        await callMaterialPreviewFunction('onMouseDown', { x: event.x, y: event.y, button: event.button });
 
         async function mousemove(event) {
-            await Editor.Message.request('scene', 'on-material-preview-mouse-move', {
+            await callMaterialPreviewFunction('onMouseMove', {
                 movementX: event.movementX,
                 movementY: event.movementY,
             });
@@ -140,7 +144,7 @@ exports.ready = async function () {
         }
 
         async function mouseup(event) {
-            await Editor.Message.request('scene', 'on-material-preview-mouse-up', {
+            await callMaterialPreviewFunction('onMouseUp', {
                 x: event.x,
                 y: event.y,
             });
@@ -153,6 +157,14 @@ exports.ready = async function () {
         document.addEventListener('mousemove', mousemove);
         document.addEventListener('mouseup', mouseup);
 
+        panel.isPreviewDataDirty = true;
+    });
+
+    panel.$.canvas.addEventListener('wheel', async (event) => {
+        await callMaterialPreviewFunction('onMouseWheel', {
+            wheelDeltaY: event.wheelDeltaY,
+            wheelDeltaX: event.wheelDeltaX,
+        });
         panel.isPreviewDataDirty = true;
     });
 
@@ -171,9 +183,34 @@ exports.ready = async function () {
     Editor.Message.addBroadcastListener('material-inspector:change-dump', this.updatePreviewDataDirtyBind);
 };
 
-exports.close = function () {
+exports.update = async function(assetList, metaList) {
     const panel = this;
+    callMaterialPreviewFunction('resetCamera');
 
+    panel.assetList = assetList;
+    panel.metaList = metaList;
+    panel.asset = assetList[0];
+    panel.meta = metaList[0];
+    const notOnlyOne = assetList.length !== 1;
+    this.hideAllContent(notOnlyOne);
+    if (notOnlyOne) {
+        return;
+    }
+    if (!panel.$.canvas) {
+        return;
+    }
+
+    await panel.glPreview.init({ width: this.$.canvas.clientWidth, height: this.$.canvas.clientHeight });
+
+    panel.isPreviewDataDirty = true;
+    panel.refreshPreview();
+};
+
+exports.close = function() {
+    const panel = this;
+    callMaterialPreviewFunction('hide');
     panel.resizeObserver.unobserve(panel.$.container);
     Editor.Message.removeBroadcastListener('material-inspector:change-dump', this.updatePreviewDataDirtyBind);
+    // clear the canvas on close hook
+    panel.glPreview.destroyGL();
 };

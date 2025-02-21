@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,22 +20,27 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
 import { AudioPlayer, OneShotAudio } from 'pal/audio';
-import { fastRemoveAt } from '../core/utils/array';
+import { js } from '../core';
 
 type ManagedAudio = AudioPlayer | OneShotAudio;
+
+/** @mangle */
 interface AudioInfo<T> {
     audio: T;
     playTime: number;
 }
 
+/** @mangle */
 export class AudioManager {
     private _oneShotAudioInfoList: AudioInfo<OneShotAudio>[] = [];
     private _audioPlayerInfoList: AudioInfo<AudioPlayer>[] = [];
 
-    private _findIndex (audioInfoList: AudioInfo<ManagedAudio>[], audio: ManagedAudio) {
+    constructor () {}
+
+    private _findIndex (audioInfoList: AudioInfo<ManagedAudio>[], audio: ManagedAudio): number {
         return audioInfoList.findIndex((item) => item.audio === audio);
     }
 
@@ -53,11 +57,9 @@ export class AudioManager {
         });
         return true;
     }
-    public addPlaying (audio: ManagedAudio) {
+    public addPlaying (audio: ManagedAudio): void {
         if (audio instanceof AudioPlayer) {
-            if (this._tryAddPlaying(this._audioPlayerInfoList, audio)) {
-                return;
-            }
+            this._tryAddPlaying(this._audioPlayerInfoList, audio);
         } else {
             this._tryAddPlaying(this._oneShotAudioInfoList, audio);
         }
@@ -68,20 +70,18 @@ export class AudioManager {
         if (idx === -1) {
             return false;
         }
-        fastRemoveAt(audioInfoList, idx);
+        js.array.fastRemoveAt(audioInfoList, idx);
         return true;
     }
-    public removePlaying (audio: ManagedAudio) {
+    public removePlaying (audio: ManagedAudio): void {
         if (audio instanceof AudioPlayer) {
-            if (this._tryRemovePlaying(this._audioPlayerInfoList, audio)) {
-                return;
-            }
+            this._tryRemovePlaying(this._audioPlayerInfoList, audio);
         } else {
             this._tryRemovePlaying(this._oneShotAudioInfoList, audio);
         }
     }
 
-    public discardOnePlayingIfNeeded () {
+    public discardOnePlayingIfNeeded (): void {
         if (this._audioPlayerInfoList.length + this._oneShotAudioInfoList.length < AudioPlayer.maxAudioChannel) {
             return;
         }
@@ -105,6 +105,22 @@ export class AudioManager {
             audioInfoToDiscard.audio.stop();
             this.removePlaying(audioInfoToDiscard.audio);
         }
+    }
+
+    public pause (): void {
+        this._oneShotAudioInfoList.forEach((info): void => {
+            info.audio.stop();
+        });
+        this._audioPlayerInfoList.forEach((info): void => {
+            info.audio.pause().catch((e): void => {});
+        });
+    }
+
+    public resume (): void {
+        // onShotAudio can not be resumed
+        this._audioPlayerInfoList.forEach((info): void => {
+            info.audio.play().catch((e): void => {});
+        });
     }
 }
 

@@ -23,9 +23,6 @@
  THE SOFTWARE.
  */
 
-/**
- * @packageDocumentation
- * @hidden
- */
-
 import '../cocos/physics/physx/instantiate';
+
+export { loadWasmModulePhysX } from '../cocos/physics/physx/instantiate';

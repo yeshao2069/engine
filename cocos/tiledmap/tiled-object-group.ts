@@ -1,19 +1,18 @@
 /*
  Copyright (c) 2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -22,24 +21,20 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-
-/**
- * @packageDocumentation
- * @module tiledmap
- */
+*/
 
 import { ccclass, help, type, requireComponent } from 'cc.decorator';
-import { Component } from '../core/components';
+import { Component } from '../scene-graph/component';
 import { Sprite } from '../2d/components/sprite';
 import { Label } from '../2d/components/label';
-import { BlendFactor } from '../core/gfx';
+import { BlendFactor } from '../gfx';
 
 import { TMXMapInfo } from './tmx-xml-parser';
 import { TiledTextureGrids, GID, TileFlag, Orientation, StaggerAxis, TMXObjectType, PropertiesInfo, TiledAnimationType, TMXObject, TMXObjectGroupInfo } from './tiled-types';
 import { UITransform } from '../2d/framework/ui-transform';
-import { CCBoolean, Node, Vec2, Color, CCObject } from '../core';
+import { CCBoolean, Vec2, Color, CCObjectFlags } from '../core';
 import { SpriteFrame } from '../2d/assets';
+import { Node } from '../scene-graph/node';
 
 /**
  * @en Renders the TMX object group.
@@ -53,11 +48,15 @@ import { SpriteFrame } from '../2d/assets';
 export class TiledObjectGroup extends Component {
     protected _premultiplyAlpha = false;
 
+    constructor () {
+        super();
+    }
+
     @type(CCBoolean)
-    get premultiplyAlpha () {
+    get premultiplyAlpha (): boolean {
         return this._premultiplyAlpha;
     }
-    set premultiplyAlpha (value:boolean) {
+    set premultiplyAlpha (value: boolean) {
         this._premultiplyAlpha = value;
     }
 
@@ -69,7 +68,7 @@ export class TiledObjectGroup extends Component {
      * @example
      * let offset = tMXObjectGroup.getPositionOffset();
      */
-    public getPositionOffset () {
+    public getPositionOffset (): Vec2 | undefined {
         return this._positionOffset;
     }
 
@@ -81,7 +80,7 @@ export class TiledObjectGroup extends Component {
      * @example
      * let offset = tMXObjectGroup.getProperties();
      */
-    public getProperties () {
+    public getProperties (): PropertiesInfo | undefined {
         return this._properties;
     }
 
@@ -93,7 +92,7 @@ export class TiledObjectGroup extends Component {
      * @example
      * let groupName = tMXObjectGroup.getGroupName;
      */
-    public getGroupName () {
+    public getGroupName (): string | undefined {
         return this._groupName;
     }
 
@@ -102,7 +101,7 @@ export class TiledObjectGroup extends Component {
      * @param {String} propertyName
      * @return {Object}
      */
-    public getProperty (propertyName: { toString (): string } | string) {
+    public getProperty (propertyName: { toString (): string } | string): string | number {
         return this._properties![propertyName.toString()];
     }
 
@@ -117,7 +116,7 @@ export class TiledObjectGroup extends Component {
      * @example
      * let object = tMXObjectGroup.getObject("Group");
      */
-    public getObject (objectName:string) {
+    public getObject (objectName: string): TMXObject | null {
         for (let i = 0, len = this._objects.length; i < len; i++) {
             const obj = this._objects[i];
             if (obj && obj.name === objectName) {
@@ -136,7 +135,7 @@ export class TiledObjectGroup extends Component {
      * @example
      * let objects = tMXObjectGroup.getObjects();
      */
-    public getObjects () {
+    public getObjects (): TMXObject[] {
         return this._objects;
     }
 
@@ -145,7 +144,7 @@ export class TiledObjectGroup extends Component {
     protected _mapInfo?: TMXMapInfo;
     protected _properties?: PropertiesInfo;
     protected _offset?: Vec2;
-    get offset () { return this._offset!; }
+    get offset (): Vec2 { return this._offset!; }
     protected _opacity?: number;
     protected _tintColor: Color | null = null;
 
@@ -159,7 +158,10 @@ export class TiledObjectGroup extends Component {
     }[];
     protected _objects: TMXObject[] = [];
 
-    public _init (groupInfo: TMXObjectGroupInfo, mapInfo: TMXMapInfo, texGrids: TiledTextureGrids) {
+    /**
+     * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
+     */
+    public _init (groupInfo: TMXObjectGroupInfo, mapInfo: TMXMapInfo, texGrids: TiledTextureGrids): void {
         const FLIPPED_MASK = TileFlag.FLIPPED_MASK;
         const FLAG_HORIZONTAL = TileFlag.HORIZONTAL;
         const FLAG_VERTICAL = TileFlag.VERTICAL;
@@ -205,7 +207,7 @@ export class TiledObjectGroup extends Component {
             height = mapSize.height * tileSize.height;
         }
 
-        const transComp = this.node._uiProps.uiTransformComp!;
+        const transComp = this.node._getUITransformComp()!;
         transComp.setContentSize(width, height);
 
         const leftTopX = width * transComp.anchorX;
@@ -248,13 +250,14 @@ export class TiledObjectGroup extends Component {
                 textNode.name = textName;
                 textNode.parent = this.node;
                 textNode.setSiblingIndex(i);
+                textNode.layer = this.node.layer;
 
                 let label = textNode.getComponent(Label);
                 if (!label) {
                     label = textNode.addComponent(Label);
                 }
 
-                const textTransComp = textNode._uiProps.uiTransformComp!;
+                const textTransComp = textNode._getUITransformComp()!;
                 textNode.active = object.visible;
                 textTransComp.anchorX = 0;
                 textTransComp.anchorY = 1;
@@ -290,9 +293,9 @@ export class TiledObjectGroup extends Component {
 
                 // Delete image nodes implemented as private nodes
                 // Use cc.Node to implement node-level requirements
-                if (imgNode && (imgNode._objFlags & CCObject.Flags.HideInHierarchy)) {
+                if (imgNode && (imgNode._objFlags & CCObjectFlags.HideInHierarchy)) {
                     imgNode.removeFromParent();
-                    imgNode.hideFlags |= CCObject.Flags.DontSave;
+                    imgNode.hideFlags |= CCObjectFlags.DontSave;
                     imgNode.destroy();
                     imgNode = null;
                 }
@@ -318,13 +321,14 @@ export class TiledObjectGroup extends Component {
                 imgNode.name = imgName;
                 imgNode.parent = this.node;
                 imgNode.setSiblingIndex(i);
+                imgNode.layer = this.node.layer;
 
                 let sprite = imgNode.getComponent(Sprite);
                 if (!sprite) {
                     sprite = imgNode.addComponent(Sprite);
                 }
 
-                const imgTrans = imgNode._uiProps.uiTransformComp!;
+                const imgTrans = imgNode._getUITransformComp()!;
                 if (iso) {
                     imgTrans.anchorX = 0.5 + tileOffsetX / object.width;
                     imgTrans.anchorY = tileOffsetY / object.height;
@@ -344,11 +348,14 @@ export class TiledObjectGroup extends Component {
 
                 sprite.sizeMode = Sprite.SizeMode.CUSTOM;
 
-                // @ts-expect-error remove when component remove blend function
-                sprite._srcBlendFactor = this._premultiplyAlpha ? BlendFactor.ONE : BlendFactor.SRC_ALPHA;
-                // @ts-expect-error remove when component remove blend function
-                sprite._dstBlendFactor = BlendFactor.ONE_MINUS_SRC_ALPHA;
-                sprite._updateBlendFunc();
+                // HACK: we should support _premultiplyAlpha when group had material
+                const srcBlendFactor = this._premultiplyAlpha ? BlendFactor.ONE : BlendFactor.SRC_ALPHA;
+                if (sprite.srcBlendFactor !== srcBlendFactor) {
+                    sprite.srcBlendFactor = srcBlendFactor;
+                    if (sprite.material) {
+                        sprite._updateBlendFunc();
+                    }
+                }
 
                 let spf = grid.spriteFrame;
                 if (!spf) {
@@ -368,7 +375,7 @@ export class TiledObjectGroup extends Component {
 
                 imgTrans.setContentSize(object.width, object.height);
 
-                sprite.markForUpdateRenderData();
+                sprite._markForUpdateRenderData();
             }
         }
         this._objects = objects;
@@ -384,7 +391,7 @@ export class TiledObjectGroup extends Component {
         }
     }
 
-    public update (dt: number) {
+    public update (dt: number): void {
         if (!this._hasAniObj) {
             return;
         }
@@ -407,7 +414,7 @@ export class TiledObjectGroup extends Component {
 
             const tileOffsetX = tileset.tileOffset.x;
             const tileOffsetY = tileset.tileOffset.y;
-            const imgTrans = imgNode._uiProps.uiTransformComp!;
+            const imgTrans = imgNode._getUITransformComp()!;
             if (iso) {
                 imgTrans.anchorX = 0.5 + tileOffsetX / object.width;
                 imgTrans.anchorY = tileOffsetY / object.height;
@@ -423,7 +430,7 @@ export class TiledObjectGroup extends Component {
             spf.rect = grid._rect!;
 
             sp.spriteFrame = spf;
-            sp.markForUpdateRenderData();
+            sp._markForUpdateRenderData();
         }
     }
 }

@@ -1,7 +1,11 @@
 'use strict';
 const path = require('path');
+const { injectionStyle } = require('../../utils/prop');
 
-exports.template = `
+const defaultActiveTab = 'animation';
+let cacheActiveTab = defaultActiveTab;
+
+exports.template = /* html */`
 <div class="asset-fbx">
     <header class="header">
         <ui-tab class="tabs"></ui-tab>
@@ -12,18 +16,18 @@ exports.template = `
 </div>
 `;
 
-exports.style = `
+exports.style = /* css */`
 .asset-fbx {
     display: flex;
     flex: 1;
     flex-direction: column;
-    padding-top: 5px;
 }
 
 .asset-fbx > .header {
-    text-align: center;
-    padding-bottom: 10px;
-    line-height: calc(var(--size-big-line) * 1px);
+    padding: 8px 4px;
+}
+.asset-fbx > .header > .tabs {
+    height: 24px;
 }
 `;
 
@@ -41,22 +45,19 @@ const Components = {
     fbx: path.join(__dirname, `./fbx.js`),
 };
 
-/**
- * attribute corresponds to the edit element
- */
 const Elements = {
     tabs: {
-        ready () {
+        ready() {
             const panel = this;
 
             panel.$.tabs.addEventListener('change', () => {
-                panel.activeTab = panel.tabs[panel.$.tabs.value];
+                cacheActiveTab = panel.activeTab = panel.tabs[panel.$.tabs.value];
                 Elements.tabPanel.update.call(panel);
             });
 
-            panel.activeTab = 'animation';
+            panel.activeTab = cacheActiveTab;
         },
-        update () {
+        update() {
             const panel = this;
 
             panel.$.tabs.innerText = '';
@@ -71,39 +72,82 @@ const Elements = {
 
             panel.tabs.forEach((tab) => {
                 const button = document.createElement('ui-button');
+                button.setAttribute('size', 'medium');
                 panel.$.tabs.appendChild(button);
 
                 const label = document.createElement('ui-label');
                 button.appendChild(label);
-                label.setAttribute('value', `i18n:inspector.asset.fbx.${tab}`);
+                label.setAttribute('value', `i18n:ENGINE.assets.fbx.${tab}`);
             });
 
             panel.$.tabs.value = panel.tabs.indexOf(panel.activeTab);
         },
     },
     tabPanel: {
-        ready () {
+        ready() {
             const panel = this;
+
+            panel.$.tabPanel.injectionStyle(injectionStyle);
 
             panel.$.tabPanel.addEventListener('change', () => {
                 panel.dispatch('change');
             });
+            panel.$.tabPanel.addEventListener('snapshot', () => {
+                panel.dispatch('snapshot');
+            });
         },
-        update () {
+        update() {
             const panel = this;
-            Editor.Message.broadcast('fbx-inspector:change-tab', panel.activeTab);
             panel.$.tabPanel.setAttribute('src', Components[panel.activeTab]);
             panel.$.tabPanel.update(panel.assetList, panel.metaList);
+
+            // Delay, waiting for the fbx preview area initialization to complete
+            setTimeout(() => {
+                Editor.Message.broadcast('fbx-inspector:change-tab', panel.activeTab);
+            });
         },
     },
 };
 
-/**
- * Methods for automatic rendering of components
- * @param assetList
- * @param metaList
- */
-exports.update = function (assetList, metaList) {
+exports.methods = {
+    apply() {
+        Editor.Message.broadcast('fbx-inspector:apply');
+    },
+};
+
+exports.listeners = {
+    track(event) {
+        if (event.args?.length) {
+            const { prop, value } = event.args[0];
+            if (!value) { return; } // 只有被勾选的时候上报埋点
+
+            const trackMap = {
+                'meshOptimize.enable': 'A100000',
+                'fbx.smartMaterialEnabled': 'A100001',
+                disableMeshSplit: 'A100002',
+            };
+            const trackId = trackMap[prop];
+            if (trackId) {
+                Editor.Metrics._trackEventWithTimer({
+                    category: 'importSystem',
+                    id: trackId,
+                    value: 1,
+                });
+            }
+        }
+    },
+};
+
+exports.ready = function() {
+    for (const prop in Elements) {
+        const element = Elements[prop];
+        if (element.ready) {
+            element.ready.call(this);
+        }
+    }
+};
+
+exports.update = function(assetList, metaList) {
     this.assetList = assetList;
     this.metaList = metaList;
     this.asset = assetList[0];
@@ -115,36 +159,4 @@ exports.update = function (assetList, metaList) {
             element.update.call(this);
         }
     }
-};
-
-/**
- * Method of initializing the panel
- */
-exports.ready = function () {
-    for (const prop in Elements) {
-        const element = Elements[prop];
-        if (element.ready) {
-            element.ready.call(this);
-        }
-    }
-};
-
-exports.methods = {
-    /**
-     * Update whether a data is editable in multi-select state
-     */
-    updateInvalid (element, prop) {
-        const invalid = this.metaList.some((meta) => meta.userData[prop] !== this.meta.userData[prop]);
-        element.invalid = invalid;
-    },
-    /**
-     * Update read-only status
-     */
-    updateReadonly (element) {
-        if (this.asset.readonly) {
-            element.setAttribute('disabled', true);
-        } else {
-            element.removeAttribute('disabled');
-        }
-    },
 };

@@ -23,21 +23,6 @@
  THE SOFTWARE.
  */
 
-/**
- * @packageDocumentation
- * @hidden
- */
+import '../cocos/physics/bullet/instantiate';
 
-import Ammo from '../cocos/physics/ammo/ammo-instantiated';
-import '../cocos/physics/ammo/instantiate';
-
-window.Ammo = Ammo;
-
-// polyfill config
-(Ammo as any).CC_CONFIG = {
-    ignoreSelfBody: true,
-};
-
-(Ammo as any).CC_CACHE = {
-    btTriangleMesh: { enable: false },
-};
+export { loadWasmModuleBullet } from '../cocos/physics/bullet/instantiate';

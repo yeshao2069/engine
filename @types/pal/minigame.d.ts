@@ -1,18 +1,32 @@
 declare module 'pal/minigame' {
     export const minigame: IMiniGame;
     export interface IMiniGame {
+        setPreferredFramesPerSecond(_targetFrameRate: number);
+        // platform related
+        wx?: WeChatAPI;
+        tt?: ByteDanceAPI;
+        ral?: RuntimeAPI;
+
         // system
         isDevTool: boolean;
         isLandscape: boolean;
-        orientation: import('pal/system/enum-type').Orientation;
+        orientation: import('pal/screen-adapter/enum-type').Orientation;
         getSystemInfoSync(): SystemInfo;
         onShow(callback: () => void): void;
         offShow(callback: () => void): void;
         onHide(callback: () => void): void;
         offHide(callback: () => void): void;
+        onWindowResize?(callback: () => void): void;
+        /**
+         * This method returns the standardized SafeArea based on the screen coordinate system,
+         * which is not affected by the orientation of the screen.
+         * @returns {SafeArea} An interface displaying the data of safe area, including 'top', 'bottom', 'left', 'right', 'width' and 'height'.
+         */
         getSafeArea(): SafeArea;
-        triggerGC(): void;
+        triggerGC?(): void;
         getBatteryInfoSync(): BatteryInfo;
+
+        exitMiniProgram? (): void;
 
         // render
         getSharedCanvas(): any;
@@ -20,6 +34,7 @@ declare module 'pal/minigame' {
 
         // file system
         getFileSystemManager(): FileSystemManager;
+        loadSubpackage? (option: LoadSubpackageOption): LoadSubpackageTask;
 
         // input
         onTouchStart: IEventManager<TouchEvent>;
@@ -42,6 +57,55 @@ declare module 'pal/minigame' {
         offAccelerometerChange(cb?: AccelerometerChangeCallback);
         startAccelerometer(obj: AccelerometerStartParameter);
         stopAccelerometer(obj: AccelerometerStopParameter);
+    }
+
+    interface WeChatAPI {
+        onKeyDown?: (cb: (res: KeyboardEventData) => void) => void;
+        onKeyUp?: (cb: (res: KeyboardEventData) => void) => void;
+
+        onMouseDown?: (cb: (res: MouseEventData) => void) => void;
+        onMouseMove?: (cb: (res: MouseEventData) => void) => void;
+        onMouseUp?: (cb: (res: MouseEventData) => void) => void;
+        onWheel?: (cb: (res: MouseWheelEventData) => void) => void;
+    }
+
+    export interface KeyboardEventData {
+        key: string;
+        code: string;
+        timeStamp: number;
+    }
+
+    export interface MouseEventData {
+        x: number;
+        y: number;
+        button: number;
+        timeStamp: number;
+    }
+
+    export interface MouseWheelEventData extends MouseEventData {
+        deltaX: number;
+        deltaY: number;
+        deltaZ: number;
+    }
+
+    interface ICANVAS_CONTEXT2D_TEXTBASELINE_ALPHABETIC {
+        name: string,
+        enable: number,
+    }
+    interface ICANVAS_CONTEXT2D_TEXTBASELINE_DEFAULT {
+        name: string,
+        alphabetic: number,
+    }
+
+    interface RuntimeAPI {
+        CANVAS_CONTEXT2D_TEXTBASELINE_ALPHABETIC: ICANVAS_CONTEXT2D_TEXTBASELINE_ALPHABETIC,
+        CANVAS_CONTEXT2D_TEXTBASELINE_DEFAULT: ICANVAS_CONTEXT2D_TEXTBASELINE_DEFAULT,
+        getFeaturePropertyInt(featureName: string): number;
+        setFeaturePropertyInt(featureName: string, value: number);
+    }
+
+    interface ByteDanceAPI {
+        getAudioContext?: () => AudioContext;
     }
 
     export type AccelerometerIntervalMode = 'game' | 'ui' | 'normal';
@@ -185,4 +249,22 @@ declare class InnerAudioContext {
     play(): any;
     seek(position:number): any;
     stop(): any;
+}
+
+interface LoadSubpackageOption {
+    name: string;
+    fail?: (...args: unknown[]) => void;
+    success?: (...args: unknown[]) => void;
+    complete?: (...args: unknown[]) => void;
+}
+interface LoadSubpackageTask {
+    onProgressUpdate(
+        listener: LoadSubpackageTaskOnProgressUpdateCallback
+    ): void;
+}
+type LoadSubpackageTaskOnProgressUpdateCallback = (result: LoadSubpackageTaskOnProgressUpdateListenerResult) => void;
+interface LoadSubpackageTaskOnProgressUpdateListenerResult {
+    progress: number;
+    totalBytesExpectedToWrite: number;
+    totalBytesWritten: number;
 }

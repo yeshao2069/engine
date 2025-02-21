@@ -1,19 +1,18 @@
 /* eslint-disable @typescript-eslint/ban-types */
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -22,12 +21,7 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-
-/**
- * @packageDocumentation
- * @module tween
- */
+*/
 
 /**
   * @en
@@ -54,7 +48,7 @@ export type TweenEasing =
  * @zh
  * 缓动的可选属性的接口定义。
  */
-export interface ITweenOption {
+export interface ITweenOption<T extends object = any> {
 
     /**
      * @en
@@ -66,7 +60,7 @@ export interface ITweenOption {
 
     /**
      * @en
-     * Interpolation functin, you can pass in a custom function.
+     * Interpolation function, you can pass in a custom function.
      * @zh
      * 插值函数，参数的意义 start:起始值，end:目标值，current:当前值，ratio:当前进度
      */
@@ -78,7 +72,7 @@ export interface ITweenOption {
      * @zh
      * 回调，当缓动动作启动时触发。
      */
-    onStart?: (target?: object) => void;
+    onStart?: (target?: T) => void;
 
     /**
      * @en
@@ -86,7 +80,7 @@ export interface ITweenOption {
      * @zh
      * 回调，当缓动动作更新时触发。
      */
-    onUpdate?: (target?: object, ratio?: number) => void;
+    onUpdate?: (target?: T, ratio?: number) => void;
 
     /**
      * @en
@@ -94,5 +88,5 @@ export interface ITweenOption {
      * @zh
      * 回调，当缓动动作完成时触发。
      */
-    onComplete?: (target?: object) => void;
+    onComplete?: (target?: T) => void;
 }

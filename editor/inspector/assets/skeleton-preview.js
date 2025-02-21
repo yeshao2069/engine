@@ -1,33 +1,36 @@
 'use strict';
 
-exports.template = `
-<div class="preview">
-    <div class="info">
-        <ui-label value="JointCount:0" class="joint-count"></ui-label>
+exports.template = /* html */`
+<ui-section header="i18n:ENGINE.inspector.preview.header" class="preview-section config no-padding" expand>
+    <div class="preview">
+        <div class="info">
+            <ui-label value="JointCount:0" class="joint-count"></ui-label>
+        </div>
+        <div class="image">
+            <canvas class="canvas"></canvas>
+        </div>
     </div>
-    <div class="image">
-        <canvas class="canvas"></canvas>
-    </div>
-</div>
+</ui-section>
 `;
 
-exports.style = `
+exports.style = /* css */`
+.preview-section {
+    margin-top: 0px;
+}
 .preview {
-    margin-top: 10px;
     border-top: 1px solid var(--color-normal-border);
 }
 .preview > .info {
-    padding-top: 8px;
+    padding: 4px 4px 0 4px;
 }
 .preview > .info > ui-label {
     margin-right: 6px;
 }
 .preview > .image {
-    height: 200px;
+    height: var(--inspector-footer-preview-height, 200px);
     overflow: hidden;
     display: flex;
     flex: 1;
-    margin-right: 10px;
 }
 .preview >.image > .canvas {
     flex: 1;
@@ -41,16 +44,32 @@ exports.$ = {
     canvas: '.canvas',
 };
 
+async function callSkeletonPreviewFunction(funcName, ...args) {
+    return await Editor.Message.request('scene', 'call-preview-function', 'scene:skeleton-preview', funcName, ...args);
+}
+
 const Elements = {
     preview: {
         ready() {
             const panel = this;
 
+            let _isPreviewDataDirty = false;
+            Object.defineProperty(panel, 'isPreviewDataDirty', {
+                get() {
+                    return _isPreviewDataDirty;
+                },
+                set(value) {
+                    if (value !== _isPreviewDataDirty) {
+                        _isPreviewDataDirty = value;
+                        value && panel.refreshPreview();
+                    }
+                },
+            });
             panel.$.canvas.addEventListener('mousedown', async (event) => {
-                await Editor.Message.request('scene', 'on-skeleton-preview-mouse-down', { x: event.x, y: event.y });
+                await callSkeletonPreviewFunction('onMouseDown', { x: event.x, y: event.y, button: event.button });
 
                 async function mousemove(event) {
-                    await Editor.Message.request('scene', 'on-skeleton-preview-mouse-move', {
+                    await callSkeletonPreviewFunction('onMouseMove', {
                         movementX: event.movementX,
                         movementY: event.movementY,
                     });
@@ -59,7 +78,7 @@ const Elements = {
                 }
 
                 async function mouseup(event) {
-                    await Editor.Message.request('scene', 'on-skeleton-preview-mouse-up', {
+                    await callSkeletonPreviewFunction('onMouseUp', {
                         x: event.x,
                         y: event.y,
                     });
@@ -73,9 +92,18 @@ const Elements = {
                 document.addEventListener('mousemove', mousemove);
                 document.addEventListener('mouseup', mouseup);
 
-               
+
                 panel.isPreviewDataDirty = true;
             });
+
+            panel.$.canvas.addEventListener('wheel', async (event) => {
+                await callSkeletonPreviewFunction('onMouseWheel', {
+                    wheelDeltaY: event.wheelDeltaY,
+                    wheelDeltaX: event.wheelDeltaX,
+                });
+                panel.isPreviewDataDirty = true;
+            });
+
 
             const GlPreview = Editor._Module.require('PreviewExtends').default;
             panel.glPreview = new GlPreview('scene:skeleton-preview', 'query-skeleton-preview-data');
@@ -96,15 +124,15 @@ const Elements = {
             }
 
             await panel.glPreview.init({ width: panel.$.canvas.clientWidth, height: panel.$.canvas.clientHeight });
-            const info = await Editor.Message.request('scene', 'set-skeleton-preview-skeleton', panel.asset.uuid);
+            const info = await callSkeletonPreviewFunction('setSkeleton', panel.asset.uuid);
             panel.infoUpdate(info);
-            panel.refreshPreview();
+            this.isPreviewDataDirty = true;
         },
         close() {
             const panel = this;
 
             panel.resizeObserver.unobserve(panel.$.image);
-        }
+        },
     },
     info: {
         ready() {
@@ -124,41 +152,9 @@ const Elements = {
             panel.isPreviewDataDirty = true;
         },
         close() {
-            Editor.Message.request('scene', 'hide-skeleton-preview');
+            callSkeletonPreviewFunction('hide');
         },
     },
-};
-
-exports.update = function (assetList, metaList) {
-    this.assetList = assetList;
-    this.metaList = metaList;
-    this.asset = assetList[0];
-    this.meta = metaList[0];
-
-    for (const prop in Elements) {
-        const element = Elements[prop];
-        if (element.update) {
-            element.update.call(this);
-        }
-    }
-};
-
-exports.ready = function () {
-    for (const prop in Elements) {
-        const element = Elements[prop];
-        if (element.ready) {
-            element.ready.call(this);
-        }
-    }
-};
-
-exports.close = function () {
-    for (const prop in Elements) {
-        const element = Elements[prop];
-        if (element.close) {
-            element.close.call(this);
-        }
-    }
 };
 
 exports.methods = {
@@ -170,9 +166,7 @@ exports.methods = {
             return;
         }
 
-        if (panel.isPreviewDataDirty) {
-            panel.isPreviewDataDirty = false;
-
+        const doDraw = async () => {
             try {
                 const canvas = panel.$.canvas;
                 const image = panel.$.image;
@@ -183,8 +177,8 @@ exports.methods = {
                     canvas.width = width;
                     canvas.height = height;
 
-                    panel.glPreview.initGL(canvas, { width, height });
-                    panel.glPreview.resizeGL(width, height);
+                    await panel.glPreview.initGL(canvas, { width, height });
+                    await panel.glPreview.resizeGL(width, height);
                 }
 
                 const info = await panel.glPreview.queryPreviewData({
@@ -192,15 +186,54 @@ exports.methods = {
                     height: canvas.height,
                 });
 
-                panel.glPreview.drawGL(info.buffer, info.width, info.height);
+                panel.glPreview.drawGL(info);
             } catch (e) {
                 console.warn(e);
             }
-        }
+        };
 
-        cancelAnimationFrame(panel.animationId);
-        panel.animationId = requestAnimationFrame(() => {
-            panel.refreshPreview();
+        requestAnimationFrame(async () => {
+            await doDraw();
+            panel.isPreviewDataDirty = false;
         });
     },
+};
+
+exports.ready = function() {
+    for (const prop in Elements) {
+        const element = Elements[prop];
+        if (element.ready) {
+            element.ready.call(this);
+        }
+    }
+};
+
+exports.update = function(assetList, metaList) {
+    this.assetList = assetList;
+    this.metaList = metaList;
+    this.asset = assetList[0];
+    this.meta = metaList[0];
+
+    // 如何多选就隐藏预览
+    if (assetList.length > 1) {
+        this.$.container.style.display = 'none';
+    } else {
+        this.$.container.style.display = 'block';
+    }
+
+    for (const prop in Elements) {
+        const element = Elements[prop];
+        if (element.update) {
+            element.update.call(this);
+        }
+    }
+};
+
+exports.close = function() {
+    for (const prop in Elements) {
+        const element = Elements[prop];
+        if (element.close) {
+            element.close.call(this);
+        }
+    }
 };

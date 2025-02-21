@@ -23,13 +23,8 @@
  THE SOFTWARE.
  */
 
-/**
- * @packageDocumentation
- * @hidden
- */
-
-import { Component } from '../../cocos/core/components/component';
-import { Node } from '../../cocos/core/scene-graph';
+import { Component } from '../../cocos/scene-graph/component';
+import { Node } from '../../cocos/scene-graph';
 import { legacyCC } from '../../cocos/core/global-exports';
 
 type Constructor<T = {}> = new(...args: any[]) => T;
@@ -67,13 +62,12 @@ interface IPoolHandlerComponent extends Component {
  *      等等....
  */
 export class NodePool {
-
     /**
      * @en The pool handler component, it could be the class name or the constructor.
      * @zh 缓冲池处理组件，用于节点的回收和复用逻辑，这个属性可以是组件类名或组件的构造函数。
      */
-    public poolHandlerComp?: Constructor<IPoolHandlerComponent> | string;
-    private _pool: Node[];
+    public declare poolHandlerComp?: Constructor<IPoolHandlerComponent> | string;
+    private _pool: Node[] = [];
 
     /**
      * @en
@@ -95,14 +89,13 @@ export class NodePool {
      */
     constructor (poolHandlerComp?: Constructor<IPoolHandlerComponent> | string) {
         this.poolHandlerComp = poolHandlerComp;
-        this._pool = [];
     }
 
     /**
      * @en The current available size in the pool
      * @zh 获取当前缓冲池的可用对象数量
      */
-    public size () {
+    public size (): number {
         return this._pool.length;
     }
 
@@ -110,7 +103,7 @@ export class NodePool {
      * @en Destroy all cached nodes in the pool
      * @zh 销毁对象池中缓存的所有节点
      */
-    public clear () {
+    public clear (): void {
         const count = this._pool.length;
         for (let i = 0; i < count; ++i) {
             this._pool[i].destroy();
@@ -130,7 +123,7 @@ export class NodePool {
      * const myNode = instantiate(this.template);
      * this.myPool.put(myNode);
      */
-    public put (obj: Node) {
+    public put (obj: Node): void {
         if (obj && this._pool.indexOf(obj) === -1) {
             // Remove from parent, but don't cleanup
             obj.removeFromParent();
@@ -159,8 +152,7 @@ export class NodePool {
         const last = this._pool.length - 1;
         if (last < 0) {
             return null;
-        }
-        else {
+        } else {
             // Pop the last object in pool
             const obj = this._pool[last];
             this._pool.length = last;

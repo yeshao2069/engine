@@ -245,7 +245,7 @@ var Audio = function (_HTMLAudioElement) {
     }, {
         key: 'destroy',
         value: function destroy() {
-            console.log("destory: " + _typeof(_innerAudioContextMap.get(this).destroy));
+            console.log("destroy: " + _typeof(_innerAudioContextMap.get(this).destroy));
             _innerAudioContextMap.get(this).destroy();
         }
     }, {
@@ -1684,7 +1684,7 @@ var XMLHttpRequest = function (_EventTarget) {
                 errorMessage = _res$errorMessage === undefined ? "" : _res$errorMessage;
 
             var data = res.data || "";
-            if (data.includes("超时") || errorMessage.includes("超时")) {
+            if ((typeof data === "string" && data.includes("超时")) || errorMessage.includes("超时")) {
               _triggerEvent.call(_this2, 'timeout');
             }
 
@@ -2102,6 +2102,7 @@ Object.defineProperty(exports, "__esModule", {
 var location = {
   href: 'game.js',
   hostname: "alipay.com",
+  protocol: '',
 
   reload: function reload() {},
   replace: function replace() {}
@@ -2537,3 +2538,6 @@ function blur() {}
 
 /******/ });
 //# sourceMappingURL=my-adapter.js.map
+
+require('../../../common/xmldom/dom-parser');
+require('./unify');

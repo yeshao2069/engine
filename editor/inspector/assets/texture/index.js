@@ -8,21 +8,18 @@ exports.style = texture.style;
 
 exports.$ = texture.$;
 
-/**
- * attribute corresponds to the edit element
- */
 const Elements = texture.Elements;
 
-/**
- * Methods for automatic rendering of components
- * @param assetList
- * @param metaList
- */
-exports.update = function (assetList, metaList) {
+exports.methods = texture.methods;
+
+exports.ready = texture.ready;
+
+exports.update = function(assetList, metaList, parentAssetList) {
     this.assetList = assetList;
     this.metaList = metaList;
     this.asset = assetList[0];
     this.meta = metaList[0];
+    this.parentAssetList = parentAssetList;
 
     this.userData = this.meta.userData;
     this.userDataList = this.metaList.map((item) => item.userData);
@@ -34,10 +31,3 @@ exports.update = function (assetList, metaList) {
         }
     }
 };
-
-/**
- * Method of initializing the panel
- */
-exports.ready = texture.ready;
-
-exports.methods = texture.methods;;

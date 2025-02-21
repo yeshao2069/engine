@@ -1,19 +1,18 @@
 /*
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -22,12 +21,7 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-
-/**
- * @packageDocumentation
- * @module tiledmap
- */
+*/
 
 /**
  * @en TiledTile can control the specified map tile.
@@ -39,14 +33,18 @@
  * @extends Component
  */
 
-import { ccclass, help, menu, type } from 'cc.decorator';
-import { Component } from '../core/components';
+import { ccclass, executeInEditMode, help, menu, requireComponent, type } from 'cc.decorator';
+import { Component } from '../scene-graph/component';
 import { TiledLayer } from './tiled-layer';
 import { CCInteger, warn } from '../core';
+import { UITransform } from '../2d/framework';
+import { NodeEventType } from '../scene-graph/node-event';
 
 @ccclass('cc.TiledTile')
 @help('i18n:cc.TiledTile')
 @menu('TiledMap/TiledTile')
+@requireComponent(UITransform)
+@executeInEditMode
 export class TiledTile extends Component {
     _layer: TiledLayer | null = null;
 
@@ -88,7 +86,7 @@ export class TiledTile extends Component {
      * @default 0
      */
     @type(CCInteger)
-    get y () {
+    get y (): number {
         return this._y;
     }
     set y (value: number) {
@@ -116,28 +114,32 @@ export class TiledTile extends Component {
     }
     set grid (value: number) {
         if (this._layer) {
-            this._layer.setTileGIDAt(value as unknown as any, this._x, this._y);
+            this._layer.setTileGIDAt(value, this._x, this._y);
         }
     }
 
-    onEnable () {
+    onEnable (): void {
         const parent = this.node.parent!;
         this._layer = parent.getComponent('cc.TiledLayer') as TiledLayer;
+        this.node.on(NodeEventType.TRANSFORM_CHANGED, this._updatePosition, this);
+        this.node.on(NodeEventType.SIZE_CHANGED, this._updatePosition, this);
         this._resetTile();
         this.updateInfo();
     }
 
-    onDisable () {
+    onDisable (): void {
         this._resetTile();
+        this.node.off(NodeEventType.TRANSFORM_CHANGED, this._updatePosition, this);
+        this.node.off(NodeEventType.SIZE_CHANGED, this._updatePosition, this);
     }
 
-    private _resetTile () {
+    private _resetTile (): void {
         if (this._layer && this._layer.getTiledTileAt(this._x, this._y) === this) {
             this._layer.setTiledTileAt(this._x, this._y, null);
         }
     }
 
-    public updateInfo () {
+    public updateInfo (): void {
         if (!this._layer) return;
 
         const x = this._x;
@@ -149,5 +151,10 @@ export class TiledTile extends Component {
         const p = this._layer.getPositionAt(x, y);
         this.node.setPosition(p!.x, p!.y);
         this._layer.setTiledTileAt(x, y, this);
+        this._layer._markForUpdateRenderData();
+    }
+
+    private _updatePosition (): void {
+        this._layer!._markForUpdateRenderData();
     }
 }

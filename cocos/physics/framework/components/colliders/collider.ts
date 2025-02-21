@@ -1,19 +1,18 @@
 /* eslint-disable @typescript-eslint/no-namespace */
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -22,26 +21,20 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-
-/**
- * @packageDocumentation
- * @module physics
- */
+*/
 
 import { ccclass, tooltip, displayOrder, displayName, readOnly, type, serializable } from 'cc.decorator';
 import { EDITOR } from 'internal:constants';
-import { Eventify } from '../../../../core/event';
-import { Vec3 } from '../../../../core/math';
-import { CollisionEventType, TriggerEventType } from '../../physics-interface';
+import { Eventify, Vec3, error, geometry } from '../../../../core';
+import { CharacterTriggerEventType, CollisionEventType, TriggerEventType } from '../../physics-interface';
 import { RigidBody } from '../rigid-body';
 import { PhysicsMaterial } from '../../assets/physics-material';
-import { PhysicsSystem } from '../../physics-system';
-import { Component, error, Node } from '../../../../core';
+import { Component, Node } from '../../../../scene-graph';
 import { IBaseShape } from '../../../spec/i-physics-shape';
-import { AABB, Sphere } from '../../../../core/geometry';
 import { EColliderType, EAxisDirection } from '../../physics-enum';
-import { createShape } from '../../instance';
+import { selector, createShape } from '../../physics-selector';
+
+type Callback = (...args: any[]) => any;
 
 /**
  * @en
@@ -95,7 +88,7 @@ export class Collider extends Eventify(Component) {
     @displayName('Material')
     @displayOrder(-1)
     @tooltip('i18n:physics3d.collider.sharedMaterial')
-    public get sharedMaterial () {
+    public get sharedMaterial (): PhysicsMaterial | null {
         return this._material;
     }
 
@@ -113,11 +106,11 @@ export class Collider extends Eventify(Component) {
      * @zh
      * 获取或设置此碰撞器的物理材质，共享状态下获取将会生成新的实例。
      */
-    public get material () {
-        if (this._isSharedMaterial && this._material != null) {
-            this._material.off('physics_material_update', this._updateMaterial, this);
+    public get material (): PhysicsMaterial | null {
+        if (this._isSharedMaterial && this._material) {
+            this._material.off(PhysicsMaterial.EVENT_UPDATE, this._updateMaterial, this);
             this._material = this._material.clone();
-            this._material.on('physics_material_update', this._updateMaterial, this);
+            this._material.on(PhysicsMaterial.EVENT_UPDATE, this._updateMaterial, this);
             this._isSharedMaterial = false;
         }
         return this._material;
@@ -125,18 +118,18 @@ export class Collider extends Eventify(Component) {
 
     public set material (value) {
         if (this._shape) {
-            if (value != null && this._material != null) {
+            if (value && this._material) {
                 if (this._material.id !== value.id) {
-                    this._material.off('physics_material_update', this._updateMaterial, this);
-                    value.on('physics_material_update', this._updateMaterial, this);
+                    this._material.off(PhysicsMaterial.EVENT_UPDATE, this._updateMaterial, this);
+                    value.on(PhysicsMaterial.EVENT_UPDATE, this._updateMaterial, this);
                     this._isSharedMaterial = false;
                     this._material = value;
                 }
-            } else if (value != null && this._material == null) {
-                value.on('physics_material_update', this._updateMaterial, this);
+            } else if (value && !this._material) {
+                value.on(PhysicsMaterial.EVENT_UPDATE, this._updateMaterial, this);
                 this._material = value;
-            } else if (value == null && this._material != null) {
-                this._material.off('physics_material_update', this._updateMaterial, this);
+            } else if (!value && this._material) {
+                this._material.off(PhysicsMaterial.EVENT_UPDATE, this._updateMaterial, this);
                 this._material = value;
             }
             this._updateMaterial();
@@ -149,11 +142,11 @@ export class Collider extends Eventify(Component) {
      * @en
      * Gets or sets the collider is trigger, this will be always trigger if using builtin.
      * @zh
-     * 获取或设置碰撞器是否为触发器。(builtin中无论真假都为触发器)
+     * 获取或设置碰撞器是否为触发器。(builtin 中无论真假都为触发器)
      */
     @displayOrder(0)
     @tooltip('i18n:physics3d.collider.isTrigger')
-    public get isTrigger () {
+    public get isTrigger (): boolean {
         return this._isTrigger;
     }
 
@@ -173,7 +166,7 @@ export class Collider extends Eventify(Component) {
     @type(Vec3)
     @displayOrder(1)
     @tooltip('i18n:physics3d.collider.center')
-    public get center () {
+    public get center (): Vec3 {
         return this._center;
     }
 
@@ -190,27 +183,27 @@ export class Collider extends Eventify(Component) {
      * @zh
      * 获取封装对象，通过此对象可以访问到底层实例。
      */
-    public get shape () {
+    public get shape (): IBaseShape | null {
         return this._shape;
     }
 
-    public get worldBounds (): Readonly<AABB> {
-        if (this._aabb == null) this._aabb = new AABB();
+    public get worldBounds (): Readonly<geometry.AABB> {
+        if (this._aabb == null) this._aabb = new geometry.AABB();
         if (this._shape) this._shape.getAABB(this._aabb);
         return this._aabb;
     }
 
-    public get boundingSphere (): Readonly<Sphere> {
-        if (this._boundingSphere == null) this._boundingSphere = new Sphere();
+    public get boundingSphere (): Readonly<geometry.Sphere> {
+        if (this._boundingSphere == null) this._boundingSphere = new geometry.Sphere();
         if (this._shape) this._shape.getBoundingSphere(this._boundingSphere);
         return this._boundingSphere;
     }
 
-    public get needTriggerEvent () {
+    public get needTriggerEvent (): boolean {
         return this._needTriggerEvent;
     }
 
-    public get needCollisionEvent () {
+    public get needCollisionEvent (): boolean {
         return this._needCollisionEvent;
     }
 
@@ -219,8 +212,8 @@ export class Collider extends Eventify(Component) {
     /// PROTECTED PROPERTY ///
 
     protected _shape: IBaseShape | null = null;
-    protected _aabb: AABB | null = null;
-    protected _boundingSphere: Sphere | null = null;
+    protected _aabb: geometry.AABB | null = null;
+    protected _boundingSphere: geometry.Sphere | null = null;
     protected _isSharedMaterial = true;
     protected _needTriggerEvent = false;
     protected _needCollisionEvent = false;
@@ -235,9 +228,9 @@ export class Collider extends Eventify(Component) {
     @serializable
     protected readonly _center: Vec3 = new Vec3();
 
-    protected get _assertOnLoadCalled (): boolean {
-        const r = this._isOnLoadCalled === 0;
-        if (r) { error('[Physics]: Please make sure that the node has been added to the scene'); }
+    protected get _isInitialized (): boolean {
+        const r = this._shape === null;
+        if (r) { error('[Physics]: This component has not been call onLoad yet, please make sure the node has been added to the scene.'); }
         return !r;
     }
 
@@ -257,7 +250,12 @@ export class Collider extends Eventify(Component) {
      * @param callback - The event callback, signature:`(event?:ICollisionEvent|ITriggerEvent)=>void`.
      * @param target - The event callback target.
      */
-    public on<TFunction extends (...any) => void> (type: TriggerEventType | CollisionEventType, callback: TFunction, target?, once?: boolean): any {
+    public on<TFunction extends Callback> (
+        type: TriggerEventType | CollisionEventType | CharacterTriggerEventType,
+        callback: TFunction,
+        target?,
+        once?: boolean,
+    ): any {
         const ret = super.on(type, callback, target, once);
         this._updateNeedEvent(type);
         return ret;
@@ -272,7 +270,7 @@ export class Collider extends Eventify(Component) {
      * @param callback - The event callback, signature:`(event?:ICollisionEvent|ITriggerEvent)=>void`.
      * @param target - The event callback target.
      */
-    public off (type: TriggerEventType | CollisionEventType, callback?: (...any) => void, target?) {
+    public off (type: TriggerEventType | CollisionEventType | CharacterTriggerEventType, callback?: Callback, target?): void {
         super.off(type, callback, target);
         this._updateNeedEvent();
     }
@@ -286,7 +284,11 @@ export class Collider extends Eventify(Component) {
      * @param callback - The event callback, signature:`(event?:ICollisionEvent|ITriggerEvent)=>void`.
      * @param target - The event callback target.
      */
-    public once<TFunction extends (...any) => void> (type: TriggerEventType | CollisionEventType, callback: TFunction, target?): any {
+    public once<TFunction extends Callback> (
+        type: TriggerEventType | CollisionEventType | CharacterTriggerEventType,
+        callback: TFunction,
+        target?,
+    ): any {
         // TODO: callback invoker now is a entity, after `once` will not calling the upper `off`.
         const ret = super.once(type, callback, target);
         this._updateNeedEvent(type);
@@ -300,7 +302,7 @@ export class Collider extends Eventify(Component) {
      * 移除所有指定目标或类型的注册事件。
      * @param typeOrTarget - The event type or target.
      */
-    public removeAll (typeOrTarget: TriggerEventType | CollisionEventType | Record<string, unknown>) {
+    public removeAll (typeOrTarget: TriggerEventType | CollisionEventType | Record<string, unknown>): void {
         super.removeAll(typeOrTarget);
         this._updateNeedEvent();
     }
@@ -312,10 +314,10 @@ export class Collider extends Eventify(Component) {
      * Gets the group value.
      * @zh
      * 获取分组值。
-     * @returns 整数，范围为 2 的 0 次方 到 2 的 31 次方
+     * @returns @zh 分组值，为 32 位整数，范围为 [2^0, 2^31] @en Group value which is a 32-bits integer, the range is [2^0, 2^31]
      */
     public getGroup (): number {
-        if (this._assertOnLoadCalled) {
+        if (this._isInitialized) {
             return this._shape!.getGroup();
         }
         return 0;
@@ -326,10 +328,10 @@ export class Collider extends Eventify(Component) {
      * Sets the group value.
      * @zh
      * 设置分组值。
-     * @param v - 整数，范围为 2 的 0 次方 到 2 的 31 次方
+     * @param v @zh 分组值，为 32 位整数，范围为 [2^0, 2^31] @en Group value which is a 32-bits integer, the range is [2^0, 2^31]
      */
     public setGroup (v: number): void {
-        if (this._assertOnLoadCalled) {
+        if (this._isInitialized) {
             this._shape!.setGroup(v);
         }
     }
@@ -339,10 +341,10 @@ export class Collider extends Eventify(Component) {
      * Add a grouping value to fill in the group you want to join.
      * @zh
      * 添加分组值，可填要加入的 group。
-     * @param v - 整数，范围为 2 的 0 次方 到 2 的 31 次方
+     * @param v @zh 分组值，为 32 位整数，范围为 [2^0, 2^31] @en Group value which is a 32-bits integer, the range is [2^0, 2^31]
      */
-    public addGroup (v: number) {
-        if (this._assertOnLoadCalled) {
+    public addGroup (v: number): void {
+        if (this._isInitialized) {
             this._shape!.addGroup(v);
         }
     }
@@ -352,10 +354,10 @@ export class Collider extends Eventify(Component) {
      * Subtract the grouping value to fill in the group to be removed.
      * @zh
      * 减去分组值，可填要移除的 group。
-     * @param v - 整数，范围为 2 的 0 次方 到 2 的 31 次方
+     * @param v @zh 分组值，为 32 位整数，范围为 [2^0, 2^31] @en Group value which is a 32-bits integer, the range is [2^0, 2^31]
      */
-    public removeGroup (v: number) {
-        if (this._assertOnLoadCalled) {
+    public removeGroup (v: number): void {
+        if (this._isInitialized) {
             this._shape!.removeGroup(v);
         }
     }
@@ -365,10 +367,10 @@ export class Collider extends Eventify(Component) {
      * Gets the mask value.
      * @zh
      * 获取掩码值。
-     * @returns 整数，范围为 2 的 0 次方 到 2 的 31 次方
+     * @returns @zh 掩码值，为 32 位整数，范围为 [2^0, 2^31] @en Mask value which is a 32-bits integer, the range is [2^0, 2^31]
      */
     public getMask (): number {
-        if (this._assertOnLoadCalled) {
+        if (this._isInitialized) {
             return this._shape!.getMask();
         }
         return 0;
@@ -379,10 +381,10 @@ export class Collider extends Eventify(Component) {
      * Sets the mask value.
      * @zh
      * 设置掩码值。
-     * @param v - 整数，范围为 2 的 0 次方 到 2 的 31 次方
+     * @param v @zh 掩码值，为 32 位整数，范围为 [2^0, 2^31] @en Mask value which is a 32-bits integer, the range is [2^0, 2^31]
      */
-    public setMask (v: number) {
-        if (this._assertOnLoadCalled) {
+    public setMask (v: number): void {
+        if (this._isInitialized) {
             this._shape!.setMask(v);
         }
     }
@@ -392,10 +394,10 @@ export class Collider extends Eventify(Component) {
      * Add mask values to fill in groups that need to be checked.
      * @zh
      * 添加掩码值，可填入需要检查的 group。
-     * @param v - 整数，范围为 2 的 0 次方 到 2 的 31 次方
+     * @param v @zh 掩码值，为 32 位整数，范围为 [2^0, 2^31] @en Mask value which is a 32-bits integer, the range is [2^0, 2^31]
      */
-    public addMask (v: number) {
-        if (this._assertOnLoadCalled) {
+    public addMask (v: number): void {
+        if (this._isInitialized) {
             this._shape!.addMask(v);
         }
     }
@@ -405,71 +407,75 @@ export class Collider extends Eventify(Component) {
      * Subtract the mask value to fill in the group that does not need to be checked.
      * @zh
      * 减去掩码值，可填入不需要检查的 group。
-     * @param v - 整数，范围为 2 的 0 次方 到 2 的 31 次方
+     * @param v @zh 掩码值，为 32 位整数，范围为 [2^0, 2^31] @en Mask value which is a 32-bits integer, the range is [2^0, 2^31]
      */
-    public removeMask (v: number) {
-        if (this._assertOnLoadCalled) {
+    public removeMask (v: number): void {
+        if (this._isInitialized) {
             this._shape!.removeMask(v);
         }
     }
 
     /// COMPONENT LIFECYCLE ///
 
-    protected onLoad () {
-        if (!EDITOR) {
-            this.sharedMaterial = this._material == null ? PhysicsSystem.instance.defaultMaterial : this._material;
-            this._shape = createShape(this.type);
-            this._shape.initialize(this);
-            this._shape.onLoad!();
-        }
+    protected onLoad (): void {
+        if (!selector.runInEditor) return;
+
+        this.sharedMaterial = this._material;
+        this._shape = createShape(this.type);
+        this._shape.initialize(this);
+        this._shape.onLoad!();
     }
 
-    protected onEnable () {
+    protected onEnable (): void {
         if (this._shape) {
             this._shape.onEnable!();
         }
     }
 
-    protected onDisable () {
+    protected onDisable (): void {
         if (this._shape) {
             this._shape.onDisable!();
         }
     }
 
-    protected onDestroy () {
+    protected onDestroy (): void {
         if (this._shape) {
-            if (this._material) {
-                this._material.off('physics_material_update', this._updateMaterial, this);
-            }
+            this._needTriggerEvent = false;
+            this._needCollisionEvent = false;
+            this._shape.updateEventListener();
+            if (this._material) this._material.off(PhysicsMaterial.EVENT_UPDATE, this._updateMaterial, this);
             this._shape.onDestroy!();
         }
         if (this._boundingSphere) this._boundingSphere.destroy();
     }
 
-    private _updateMaterial () {
-        if (this._shape) {
-            this._shape.setMaterial(this._material);
-        }
+    private _updateMaterial (): void {
+        if (this._shape) this._shape.setMaterial(this._material);
     }
 
-    private _updateNeedEvent (type?: string) {
+    private _updateNeedEvent (type?: string): void {
         if (this.isValid) {
             if (type !== undefined) {
                 if (type === 'onCollisionEnter' || type === 'onCollisionStay' || type === 'onCollisionExit') {
                     this._needCollisionEvent = true;
                 }
-                if (type === 'onTriggerEnter' || type === 'onTriggerStay' || type === 'onTriggerExit') {
+                if (type === 'onTriggerEnter' || type === 'onTriggerStay' || type === 'onTriggerExit'
+                    || type === 'onControllerTriggerEnter' || type === 'onControllerTriggerStay' || type === 'onControllerTriggerExit') {
                     this._needTriggerEvent = true;
                 }
             } else {
                 if (!(this.hasEventListener('onTriggerEnter')
-                || this.hasEventListener('onTriggerStay')
-                || this.hasEventListener('onTriggerExit'))) {
+                    || this.hasEventListener('onTriggerStay')
+                    || this.hasEventListener('onTriggerExit')
+                    || this.hasEventListener('onControllerTriggerEnter')
+                    || this.hasEventListener('onControllerTriggerStay')
+                    || this.hasEventListener('onControllerTriggerExit')
+                )) {
                     this._needTriggerEvent = false;
                 }
                 if (!(this.hasEventListener('onCollisionEnter')
-                || this.hasEventListener('onCollisionStay')
-                || this.hasEventListener('onCollisionExit'))) {
+                    || this.hasEventListener('onCollisionStay')
+                    || this.hasEventListener('onCollisionExit'))) {
                     this._needCollisionEvent = false;
                 }
             }

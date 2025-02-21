@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -29,6 +28,7 @@ import { DEBUG } from 'internal:constants';
  * Asserts that the expression is non-nullable, i.e. is neither `null` nor `undefined`.
  * @param expr Testing expression.
  * @param message Optional message.
+ * @engineInternal
  */
 export function assertIsNonNullable<T> (expr: T, message?: string): asserts expr is NonNullable<T> {
     assertIsTrue(!(expr === null || expr === undefined), message);
@@ -38,9 +38,20 @@ export function assertIsNonNullable<T> (expr: T, message?: string): asserts expr
  * Asserts that the expression evaluated to `true`.
  * @param expr Testing expression.
  * @param message Optional message.
+ * @engineInternal
  */
-export function assertIsTrue (expr: boolean, message?: string) {
+export function assertIsTrue (expr: unknown, message?: string): asserts expr {
     if (DEBUG && !expr) {
+        // eslint-disable-next-line no-debugger
+        // debugger;
         throw new Error(`Assertion failed: ${message ?? '<no-message>'}`);
     }
+}
+
+/**
+ * Assets that the index is valid.
+ * @engineInternal
+ */
+export function assertsArrayIndex<T> (array: T[], index: number): void {
+    assertIsTrue(index >= 0 && index < array.length, `Array index ${index} out of bounds: [0, ${array.length})`);
 }

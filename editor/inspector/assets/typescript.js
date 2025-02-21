@@ -4,29 +4,30 @@ const ReadLine = require('readline');
 const MAX_LINES = 400;
 const MAX_LENGTH = 20000;
 
-exports.template = `
+exports.template = /* html */`
 <section class="asset-typescript">
     <ui-code language="typescript"></ui-code>
 </section>`;
 
-exports.$ = {
-    container: '.asset-typescript',
-    code: 'ui-code',
-};
-
-exports.style = `
+exports.style = /* css */`
 .asset-typescript {
     flex: 1;
     display: flex;
     flex-direction: column;
-    height: 0px; // it is necessary
+    /* it is necessary */
+    height: 0px;
 }
 .asset-typescript > ui-code {
     flex: 1;
 }
 `;
 
-exports.update = function (assetList, metaList) {
+exports.$ = {
+    container: '.asset-typescript',
+    code: 'ui-code',
+};
+
+exports.update = function(assetList, metaList) {
     this.assetList = assetList;
     this.metaList = metaList;
     this.meta = metaList[0];
@@ -44,7 +45,7 @@ exports.update = function (assetList, metaList) {
 
     // Displays 400 lines or 20,000 characters
     const readStream = createReadStream(this.asset.file, {
-        encoding: 'utf-8'
+        encoding: 'utf-8',
     });
 
     let remainLines = MAX_LINES;
@@ -53,7 +54,7 @@ exports.update = function (assetList, metaList) {
 
     const readLineStream = ReadLine.createInterface({
         input: readStream,
-        setEncoding: 'utf-8'
+        setEncoding: 'utf-8',
     });
 
     readLineStream.on('line', (line) => {

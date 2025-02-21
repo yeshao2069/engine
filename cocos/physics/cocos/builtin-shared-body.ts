@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,23 +20,16 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
-/**
- * @packageDocumentation
- * @hidden
- */
-
-import { Mat4, Quat, Vec3 } from '../../core/math';
-import { intersect } from '../../core/geometry';
+import { Mat4, Quat, Vec3, js, geometry } from '../../core';
 import { BuiltInWorld } from './builtin-world';
 import { BuiltinObject } from './object/builtin-object';
 import { BuiltinShape } from './shapes/builtin-shape';
-import { Node } from '../../core';
+import { Node } from '../../scene-graph';
 import { BuiltinRigidBody } from './builtin-rigid-body';
 import { PhysicsSystem } from '../framework';
 import { PhysicsGroup } from '../framework/physics-enum';
-import { fastRemoveAt } from '../../core/utils/array';
 
 const m4_0 = new Mat4();
 const v3_0 = new Vec3();
@@ -50,7 +42,7 @@ const quat_0 = new Quat();
 export class BuiltinSharedBody extends BuiltinObject {
     private static readonly sharedBodesMap = new Map<string, BuiltinSharedBody>();
 
-    static getSharedBody (node: Node, wrappedWorld: BuiltInWorld, wrappedBody?: BuiltinRigidBody) {
+    static getSharedBody (node: Node, wrappedWorld: BuiltInWorld, wrappedBody?: BuiltinRigidBody): BuiltinSharedBody {
         const key = node.uuid;
         let newSB: BuiltinSharedBody;
         if (BuiltinSharedBody.sharedBodesMap.has(key)) {
@@ -65,7 +57,7 @@ export class BuiltinSharedBody extends BuiltinObject {
         }
         if (wrappedBody) {
             newSB.wrappedBody = wrappedBody;
-            const g = (wrappedBody.rigidBody as any)._group;
+            const g = wrappedBody.rigidBody.group;
             const m = PhysicsSystem.instance.collisionMatrix[g];
             newSB.collisionFilterGroup = g;
             newSB.collisionFilterMask = m;
@@ -73,7 +65,7 @@ export class BuiltinSharedBody extends BuiltinObject {
         return newSB;
     }
 
-    get id () {
+    get id (): number {
         return this._id;
     }
 
@@ -123,13 +115,13 @@ export class BuiltinSharedBody extends BuiltinObject {
         this.world = world;
     }
 
-    intersects (body: BuiltinSharedBody) {
+    intersects (body: BuiltinSharedBody): void {
         for (let i = 0; i < this.shapes.length; i++) {
             const shapeA = this.shapes[i];
             for (let j = 0; j < body.shapes.length; j++) {
                 const shapeB = body.shapes[j];
                 if (shapeA.collider.needTriggerEvent || shapeB.collider.needTriggerEvent) {
-                    if (intersect.resolve(shapeA.worldShape, shapeB.worldShape)) {
+                    if (geometry.intersect.resolve(shapeA.worldShape, shapeB.worldShape)) {
                         this.world.shapeArr.push(shapeA);
                         this.world.shapeArr.push(shapeB);
                     }
@@ -148,11 +140,11 @@ export class BuiltinSharedBody extends BuiltinObject {
     removeShape (shape: BuiltinShape): void {
         const i = this.shapes.indexOf(shape);
         if (i >= 0) {
-            fastRemoveAt(this.shapes, i);
+            js.array.fastRemoveAt(this.shapes, i);
         }
     }
 
-    syncSceneToPhysics () {
+    syncSceneToPhysics (): void {
         if (this.node.hasChangedFlags) {
             this.node.getWorldMatrix(m4_0);
             v3_0.set(this.node.worldPosition);
@@ -164,7 +156,7 @@ export class BuiltinSharedBody extends BuiltinObject {
         }
     }
 
-    syncInitial () {
+    syncInitial (): void {
         this.node.getWorldMatrix(m4_0);
         v3_0.set(this.node.worldPosition);
         quat_0.set(this.node.worldRotation);
@@ -174,7 +166,7 @@ export class BuiltinSharedBody extends BuiltinObject {
         }
     }
 
-    private destroy () {
+    private destroy (): void {
         BuiltinSharedBody.sharedBodesMap.delete(this.node.uuid);
         (this.node as any) = null;
         (this.world as any) = null;

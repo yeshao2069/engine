@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,14 +20,9 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
-/**
- * @packageDocumentation
- * @module 3d/primitive
- */
-
-import { Vec3 } from '../core/math';
+import { Vec3 } from '../core';
 import { IGeometry, IGeometryOptions } from './define';
 
 /**
@@ -38,10 +32,10 @@ import { IGeometry, IGeometryOptions } from './define';
  * 圆柱参数选项。
  */
 export interface ICylinderOptions extends IGeometryOptions {
-  radialSegments: number;
-  heightSegments: number;
-  capped: boolean;
-  arc: number;
+    radialSegments: number;
+    heightSegments: number;
+    capped: boolean;
+    arc: number;
 }
 
 const temp1 = new Vec3(0, 0, 0);
@@ -53,9 +47,10 @@ const temp2 = new Vec3(0, 0, 0);
  * but may be repositioned through the `center` option.
  * @zh
  * 生成一个圆柱。
- * @param radiusTop 顶部半径。
- * @param radiusBottom 底部半径。
- * @param opts 圆柱参数选项。
+ * @param radiusTop @en Radius of top plane. @zh 顶部半径。
+ * @param radiusBottom @en Radius of bottom plane.  @zh 底部半径。
+ * @param height @en The cylinder height.  @zh 圆柱的高
+ * @param opts @en The optional creation parameters of the cylinder.  @zh 圆柱参数选项。
  */
 export default function cylinder (radiusTop = 0.5, radiusBottom = 0.5, height = 2, opts: RecursivePartial<ICylinderOptions> = {}): IGeometry {
     const halfHeight = height * 0.5;
@@ -65,7 +60,7 @@ export default function cylinder (radiusTop = 0.5, radiusBottom = 0.5, height = 
     const arc = opts.arc || 2.0 * Math.PI;
 
     let cntCap = 0;
-    if (!capped) {
+    if (capped) {
         if (radiusTop > 0) {
             cntCap++;
         }
@@ -125,7 +120,7 @@ export default function cylinder (radiusTop = 0.5, radiusBottom = 0.5, height = 
     // internal fucntions
     // =======================
 
-    function generateTorso () {
+    function generateTorso (): void {
         const indexArray: number[][] = [];
 
         // this will be used to calculate the normal
@@ -195,7 +190,7 @@ export default function cylinder (radiusTop = 0.5, radiusBottom = 0.5, height = 
         }
     }
 
-    function generateCap (top) {
+    function generateCap (top): void {
         const radius = top ? radiusTop : radiusBottom;
         const sign = top ? 1 : -1;
 

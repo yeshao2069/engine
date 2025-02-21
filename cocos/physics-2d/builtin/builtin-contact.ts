@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,11 +20,7 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-/**
- * @packageDocumentation
- * @hidden
- */
+*/
 
 import { BuiltinShape2D } from './shapes/shape-2d';
 import Intersection2D from './intersection-2d';
@@ -35,10 +30,12 @@ import { BuiltinCircleShape } from './shapes/circle-shape-2d';
 import { error } from '../../core';
 import { Contact2DType } from '../framework';
 
+/** @mangle */
 export class BuiltinContact {
     shape1?: BuiltinShape2D;
     shape2?: BuiltinShape2D;
 
+    // eslint-disable-next-line @typescript-eslint/ban-types
     testFunc?: Function;
     touching = false;
 
@@ -70,7 +67,7 @@ export class BuiltinContact {
         }
     }
 
-    test () {
+    test (): boolean {
         const s1 = this.shape1!;
         const s2 = this.shape2!;
 
@@ -90,14 +87,15 @@ export class BuiltinContact {
         } else if (this.testFunc === Intersection2D.polygonCircle) {
             return Intersection2D.polygonCircle(
                 (s1 as BuiltinPolygonShape).worldPoints,
-                (s2 as BuiltinCircleShape).worldPosition, (s2 as BuiltinCircleShape).worldRadius,
+                (s2 as BuiltinCircleShape).worldPosition,
+                (s2 as BuiltinCircleShape).worldRadius,
             );
         }
 
         return false;
     }
 
-    updateState () {
+    updateState (): string {
         const result = this.test();
 
         let type = Contact2DType.None;

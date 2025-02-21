@@ -1,19 +1,18 @@
 /*
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -25,34 +24,48 @@
 */
 
 import { RUNTIME_BASED } from 'internal:constants';
-import Pool from '../../core/utils/pool';
-
-/**
- * @packageDocumentation
- * @hidden
- */
+import { minigame } from 'pal/minigame';
+import { js } from '../../core';
+import { forEach } from '../../asset/asset-manager/utilities';
 
 export const BASELINE_RATIO = 0.26;
 let _BASELINE_OFFSET = 0;
+
 if (RUNTIME_BASED) {
     _BASELINE_OFFSET = BASELINE_RATIO * 2 / 3;
+
+    const ral = minigame.ral!;
+    const featureAlphabeticeName = ral.CANVAS_CONTEXT2D_TEXTBASELINE_ALPHABETIC.name;
+    const featureAlphabeticEnable = ral.CANVAS_CONTEXT2D_TEXTBASELINE_ALPHABETIC.enable;
+
+    const defaultBaselineName = ral.CANVAS_CONTEXT2D_TEXTBASELINE_DEFAULT.name;
+    const defaultIsAlphaBetic = ral.CANVAS_CONTEXT2D_TEXTBASELINE_DEFAULT.alphabetic;
+
+    if (ral.getFeaturePropertyInt(featureAlphabeticeName) === featureAlphabeticEnable) {
+        // if support alphabetic baseline, set default baseline to alphabetic
+        ral.setFeaturePropertyInt(defaultBaselineName, defaultIsAlphaBetic);
+        if (ral.getFeaturePropertyInt(defaultBaselineName) === defaultIsAlphaBetic) {
+            // if default baseline has been successfully set to alphabetic, _BASELINE_OFFSET should be 0.
+            _BASELINE_OFFSET = 0;
+        }
+    }
 }
 export const MIDDLE_RATIO = (BASELINE_RATIO + 1) / 2 - BASELINE_RATIO;
-export function getBaselineOffset () {
+export function getBaselineOffset (): number {
     return _BASELINE_OFFSET;
 }
 
 const MAX_CACHE_SIZE = 100;
 
 interface ICacheNode {
-    key: string | null;
+    key: string;
     value: number,
     prev: ICacheNode | null,
     next: ICacheNode | null
 }
 
-const pool = new Pool<ICacheNode>(2);
-pool.get = function () {
+const pool = new js.Pool<ICacheNode>(2);
+pool.get = function (): ICacheNode {
     return this._get() || {
         key: '',
         value: 0,
@@ -61,18 +74,18 @@ pool.get = function () {
     };
 };
 
-class LRUCache {
+export class LRUCache {
     private count = 0;
     private limit = 0;
     private datas: Record<string, ICacheNode> = {};
-    private declare head;
-    private declare tail;
+    private head: ICacheNode | null = null;
+    private tail: ICacheNode | null = null;
 
-    constructor (size) {
+    constructor (size: number) {
         this.limit = size;
     }
 
-    public moveToHead (node) {
+    public moveToHead (node: ICacheNode): void {
         node.next = this.head;
         node.prev = null;
         if (this.head) this.head.prev = node;
@@ -82,25 +95,25 @@ class LRUCache {
         this.datas[node.key] = node;
     }
 
-    public put (key, value) {
+    public put (key: string, value: number): void {
         const node = pool.get();
         node!.key = key;
         node!.value = value;
 
         if (this.count >= this.limit) {
             const discard = this.tail;
-            delete this.datas[discard.key];
+            delete this.datas[discard!.key];
             this.count--;
-            this.tail = discard.prev;
-            this.tail.next = null;
-            discard.prev = null;
-            discard.next = null;
-            pool.put(discard);
+            this.tail = discard!.prev;
+            this.tail!.next = null;
+            discard!.prev = null;
+            discard!.next = null;
+            pool.put(discard!);
         }
-        this.moveToHead(node);
+        this.moveToHead(node!);
     }
 
-    public remove (node) {
+    public remove (node: ICacheNode): void {
         if (node.prev) {
             node.prev.next = node.next;
         } else {
@@ -115,7 +128,7 @@ class LRUCache {
         this.count--;
     }
 
-    public get (key) {
+    public get (key: string): number | null {
         const node = this.datas[key];
         if (node) {
             this.remove(node);
@@ -125,18 +138,18 @@ class LRUCache {
         return null;
     }
 
-    public clear () {
+    public clear (): void {
         this.count = 0;
         this.datas = {};
         this.head = null;
         this.tail = null;
     }
 
-    public has (key) {
+    public has (key: string): boolean {
         return !!this.datas[key];
     }
 
-    public delete (key) {
+    public delete (key: string): void {
         const node = this.datas[key];
         this.remove(node);
     }
@@ -147,25 +160,33 @@ const measureCache = new LRUCache(MAX_CACHE_SIZE);
 const WORD_REG = /([a-zA-Z0-9ÄÖÜäöüßéèçàùêâîôûа-яА-ЯЁё]+|\S)/;
 // eslint-disable-next-line no-useless-escape
 const SYMBOL_REG = /^[!,.:;'}\]%\?>、‘“》？。，！]/;
-const LAST_WORD_REG = /([a-zA-Z0-9ÄÖÜäöüßéèçàùêâîôûаíìÍÌïÁÀáàÉÈÒÓòóŐőÙÚŰúűñÑæÆœŒÃÂãÔõěščřžýáíéóúůťďňĚŠČŘŽÁÍÉÓÚŤżźśóńłęćąŻŹŚÓŃŁĘĆĄ-яА-ЯЁё]+|\S)$/;
-const LAST_ENGLISH_REG = /[a-zA-Z0-9ÄÖÜäöüßéèçàùêâîôûаíìÍÌïÁÀáàÉÈÒÓòóŐőÙÚŰúűñÑæÆœŒÃÂãÔõěščřžýáíéóúůťďňĚŠČŘŽÁÍÉÓÚŤżźśóńłęćąŻŹŚÓŃŁĘĆĄ-яА-ЯЁё]+$/;
-const FIRST_ENGLISH_REG = /^[a-zA-Z0-9ÄÖÜäöüßéèçàùêâîôûаíìÍÌïÁÀáàÉÈÒÓòóŐőÙÚŰúűñÑæÆœŒÃÂãÔõěščřžýáíéóúůťďňĚŠČŘŽÁÍÉÓÚŤżźśóńłęćąŻŹŚÓŃŁĘĆĄ-яА-ЯЁё]/;
+
+const CHAR_SET = '[a-zA-Z0-9ÄÖÜäöüßéèçàùêâîôûаíìÍÌïÁÀáàÉÈÒÓòóŐőÙÚŰúűñÑæÆœŒÃÂãÔõěščřžýáíéóúůťďňĚŠČŘŽÁÍÉÓÚŤżźśóńłęćąŻŹŚÓŃŁĘĆĄ-яА-ЯЁёáàảạãăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệiíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđÁÀẢẠÃĂẮẰẲẴẶÂẤẦẨẪẬÉÈẺẼẸÊẾỀỂỄỆIÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴĐ]';
+const LAST_WORD_REG = new RegExp(`(${CHAR_SET}+|\\S)$`);
+const LAST_ENGLISH_REG = new RegExp(`${CHAR_SET}+$`);
+const FIRST_ENGLISH_REG = new RegExp(`^${CHAR_SET}`);
+
 const WRAP_INSPECTION = true;
 // The unicode standard will never assign a character from code point 0xD800 to 0xDFFF
 // high surrogate (0xD800-0xDBFF) and low surrogate(0xDC00-0xDFFF) combines to a character on the Supplementary Multilingual Plane
 // reference: https://en.wikipedia.org/wiki/UTF-16
 const highSurrogateRex = /[\uD800-\uDBFF]/;
 const lowSurrogateRex = /[\uDC00-\uDFFF]/;
-
-export function isUnicodeCJK (ch: string) {
+/**
+ * @deprecated since v3.7.2, this is an engine private interface that will be removed in the future.
+ */
+export function isUnicodeCJK (ch: string): boolean {
     const __CHINESE_REG = /^[\u4E00-\u9FFF\u3400-\u4DFF]+$/;
     const __JAPANESE_REG = /[\u3000-\u303F]|[\u3040-\u309F]|[\u30A0-\u30FF]|[\uFF00-\uFFEF]|[\u4E00-\u9FAF]|[\u2605-\u2606]|[\u2190-\u2195]|\u203B/g;
     const __KOREAN_REG = /^[\u1100-\u11FF]|[\u3130-\u318F]|[\uA960-\uA97F]|[\uAC00-\uD7AF]|[\uD7B0-\uD7FF]+$/;
     return __CHINESE_REG.test(ch) || __JAPANESE_REG.test(ch) || __KOREAN_REG.test(ch);
 }
 
+/**
+ * @deprecated since v3.7.2, this is an engine private interface that will be removed in the future.
+ */
 // Checking whether the character is a whitespace
-export function isUnicodeSpace (ch: string) {
+export function isUnicodeSpace (ch: string): boolean {
     const chCode = ch.charCodeAt(0);
     return ((chCode >= 9 && chCode <= 13)
     || chCode === 32
@@ -179,8 +200,10 @@ export function isUnicodeSpace (ch: string) {
     || chCode === 8287
     || chCode === 12288);
 }
-
-export function safeMeasureText (ctx: CanvasRenderingContext2D, string: string, desc?: string) {
+/**
+ * @deprecated since v3.7.2, this is an engine private interface that will be removed in the future.
+ */
+export function safeMeasureText (ctx: CanvasRenderingContext2D, string: string, desc?: string): number {
     const font = desc || ctx.font;
     const key = `${font}\uD83C\uDFAE${string}`;
     const cache = measureCache.get(key);
@@ -195,39 +218,220 @@ export function safeMeasureText (ctx: CanvasRenderingContext2D, string: string, 
     return width;
 }
 
-// in case truncate a character on the Supplementary Multilingual Plane
-// test case: a = '😉🚗'
-// _safeSubstring(a, 1) === '😉🚗'
-// _safeSubstring(a, 0, 1) === '😉'
-// _safeSubstring(a, 0, 2) === '😉'
-// _safeSubstring(a, 0, 3) === '😉'
-// _safeSubstring(a, 0, 4) === '😉🚗'
-// _safeSubstring(a, 1, 2) === _safeSubstring(a, 1, 3) === '😉'
-// _safeSubstring(a, 2, 3) === _safeSubstring(a, 2, 4) === '🚗'
-function _safeSubstring (targetString, startIndex, endIndex?) {
-    let newStartIndex = startIndex;
-    let newEndIndex = endIndex;
-    const startChar = targetString[startIndex];
-    // lowSurrogateRex
-    if (startChar >= '\uDC00' && startChar <= '\uDFFF') {
-        newStartIndex--;
-    }
-    if (endIndex !== undefined) {
-        if (endIndex - 1 !== startIndex) {
-            const endChar = targetString[endIndex - 1];
-            // highSurrogateRex
-            if (endChar >= '\uD800' && endChar <= '\uDBFF') {
-                newEndIndex--;
-            }
-        } else if (startChar >= '\uD800' && startChar <= '\uDBFF') {
-            // highSurrogateRex
-            newEndIndex++;
+export function getSymbolLength (str: string): number {
+    const length = str.length;
+    let len = 0;
+    let count = 0;
+    let start = 0;
+    let charCode = 0;
+    for (let i = 0; i < length; i++) {
+        charCode = str.charCodeAt(i);
+        if (charCode === 0x200d) {
+            len++;
+            continue;
         }
+        if (charCode >= 0xd800 && charCode <= 0xdbff) {
+            len++;
+            charCode = str.charCodeAt(i + 1);
+            if (charCode >= 0xdc00 && charCode <= 0xdfff) {
+                len++;
+                if (i + 2 >= length || str.charCodeAt(i + 2) !== 0x200d) {
+                    start += len;
+                    count++;
+                    len = 0;
+                }
+                i++;
+                continue;
+            }
+        }
+        start = i + 1;
+        count++;
+        len = 0;
     }
-    return targetString.substring(newStartIndex, newEndIndex) as string;
+    return count;
 }
 
-export function fragmentText (stringToken: string, allWidth: number, maxWidth: number, measureText: (string: string) => number) {
+export function getSymbolAt (str: string, index: number): string  {
+    const length = str.length;
+    let len = 0;
+    let count = 0;
+    let start = 0;
+    let charCode = 0;
+    for (let i = 0; i < length; i++) {
+        charCode = str.charCodeAt(i);
+        if (charCode === 0x200d) {
+            len++;
+            continue;
+        }
+        if (charCode >= 0xd800 && charCode <= 0xdbff) {
+            len++;
+            charCode = str.charCodeAt(i + 1);
+            if (charCode >= 0xdc00 && charCode <= 0xdfff) {
+                len++;
+                if (i + 2 >= length || str.charCodeAt(i + 2) !== 0x200d) {
+                    if (index === count) {
+                        return str.slice(start, start + len);
+                    }
+                    start += len;
+                    count++;
+                    len = 0;
+                }
+                i++;
+                continue;
+            }
+        }
+        if (index === count) {
+            return str.charAt(i);
+        }
+        start = i + 1;
+        count++;
+        len = 0;
+    }
+    return '';
+}
+
+export function getSymbolCodeAt (str: string, index: number): string  {
+    const char = getSymbolAt(str, index);
+    if (char.length === 1) {
+        return `${char.charCodeAt(0)}`;
+    }
+    let charCodes: string = '';
+    for (let j = 0; j < char.length; j++) {
+        charCodes += `${char.charCodeAt(j)}`;
+    }
+    return `${charCodes}`;
+}
+
+function getSymbolStartIndex (targetString: string, index: number): number {
+    if (index >= targetString.length) {
+        return targetString.length;
+    }
+    let startCheckIndex = index;
+    let startChar = targetString[startCheckIndex];
+    while (startCheckIndex >= 0) {
+        if (startChar === '\u200d') {
+            startCheckIndex--;
+            startChar = targetString[startCheckIndex];
+        }
+        if (startChar >= '\uDC00' && startChar <= '\uDFFF') {
+            // lowSurrogateRex
+            if (startCheckIndex - 1 >= 0) {
+                startCheckIndex--;
+                startChar = targetString[startCheckIndex];
+            }
+        }
+        if (startChar >= '\uD800' && startChar <= '\uDBFF') {
+            // highSurrogateRex
+            if (startCheckIndex - 1 >= 0 && targetString[startCheckIndex - 1] === '\u200d') {
+                startCheckIndex--;
+                startChar = targetString[startCheckIndex];
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    return startCheckIndex;
+}
+
+function getSymbolEndIndex (targetString: string, index: number): number {
+    let newEndIndex = index;
+    let endCheckIndex = index;
+    let endChar = targetString[endCheckIndex];
+    while (endCheckIndex < targetString.length) {
+        if (endChar === '\u200d') {
+            endCheckIndex++;
+            newEndIndex++;
+            endChar = targetString[endCheckIndex];
+            if (endChar >= '\uD800' && endChar <= '\uDBFF') {
+                // highSurrogateRex
+                endCheckIndex++;
+                newEndIndex++;
+                endChar = targetString[endCheckIndex];
+            }
+        }
+        if (endChar >= '\uD800' && endChar <= '\uDBFF') {
+            // highSurrogateRex
+            endCheckIndex++;
+            newEndIndex++;
+            endChar = targetString[endCheckIndex];
+        } else if (endChar >= '\uDC00' && endChar <= '\uDFFF') {
+            // lowSurrogateRex
+            endCheckIndex++;
+            endChar = targetString[endCheckIndex];
+            if (endCheckIndex < targetString.length && targetString[endCheckIndex] === '\u200d') {
+                newEndIndex++;
+                endChar = targetString[endCheckIndex];
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    return newEndIndex;
+}
+
+// in case truncate a character on the Supplementary Multilingual Plane
+// test case: a = '😉🚗'
+// _safeSubstring(a, 1) === '🚗'
+// _safeSubstring(a, 0, 1) === '😉'
+// _safeSubstring(a, 0, 2) === '😉'
+// _safeSubstring(a, 0, 3) === '😉🚗'
+// _safeSubstring(a, 0, 4) === '😉🚗'
+// _safeSubstring(a, 0, 1) === _safeSubstring(a, 0, 2) === '😉'
+// _safeSubstring(a, 2, 3) === _safeSubstring(a, 2, 4) === '🚗'
+function _safeSubstring (targetString: string, startIndex: number, endIndex?: number): string {
+    let newStartIndex = getSymbolStartIndex(targetString, startIndex);
+    if (newStartIndex < startIndex) {
+        newStartIndex = getSymbolEndIndex(targetString, startIndex) + 1;
+    }
+    let newEndIndex = endIndex;
+
+    if (endIndex !== undefined) {
+        endIndex = Math.max(0, endIndex - 1);
+        newEndIndex = getSymbolEndIndex(targetString, endIndex);
+        const newStartEndIndex = getSymbolStartIndex(targetString, endIndex);
+        if (newStartEndIndex < newStartIndex || (newStartEndIndex === newStartIndex && startIndex > newStartIndex)) {
+            newEndIndex = newStartIndex;
+        } else {
+            newEndIndex += 1;
+        }
+    }
+    return targetString.substring(newStartIndex, newEndIndex);
+}
+
+/**
+* @engineInternal
+*/
+export function isEnglishWordPartAtFirst (stringToken: string): boolean {
+    return FIRST_ENGLISH_REG.test(stringToken);
+}
+/**
+* @engineInternal
+*/
+export function isEnglishWordPartAtLast (stringToken: string): boolean {
+    return LAST_ENGLISH_REG.test(stringToken);
+}
+/**
+* @engineInternal
+*/
+export function getEnglishWordPartAtFirst (stringToken: string): RegExpExecArray | null {
+    const result = FIRST_ENGLISH_REG.exec(stringToken);
+    return result;
+}
+/**
+* @engineInternal
+*/
+export function getEnglishWordPartAtLast (stringToken: string): RegExpExecArray | null {
+    const result = LAST_ENGLISH_REG.exec(stringToken);
+    return result;
+}
+/**
+ * @deprecated since v3.7.2, this is an engine private interface that will be removed in the future.
+ */
+export function fragmentText (stringToken: string, allWidth: number, maxWidth: number, measureText: (string: string) => number): string[] {
     // check the first character
     const wrappedWords: string[] = [];
     // fast return if strArr is empty
@@ -245,7 +449,7 @@ export function fragmentText (stringToken: string, allWidth: number, maxWidth: n
         let pushNum = 0;
 
         let checkWhile = 0;
-        const checkCount = 10;
+        const checkCount = 100;
 
         // Exceeded the size
         while (width > maxWidth && checkWhile++ < checkCount) {
@@ -258,12 +462,12 @@ export function fragmentText (stringToken: string, allWidth: number, maxWidth: n
         checkWhile = 0;
 
         // Find the truncation point
-        while (width <= maxWidth && checkWhile++ < checkCount) {
-            if (tmpText) {
-                const exec = WORD_REG.exec(tmpText);
-                pushNum = exec ? exec[0].length : 1;
-                sLine = tmpText;
-            }
+        // if the 'tempText' which is truncated from the next line content equals to '',
+        // we should break this loop because there is no available character in the next line.
+        while (tmpText && width <= maxWidth && checkWhile++ < checkCount) {
+            const exec = WORD_REG.exec(tmpText);
+            pushNum = exec ? exec[0].length : 1;
+            sLine = tmpText;
 
             fuzzyLen += pushNum;
             tmpText = _safeSubstring(text, fuzzyLen);
@@ -284,7 +488,9 @@ export function fragmentText (stringToken: string, allWidth: number, maxWidth: n
         let sText = _safeSubstring(text, 0, fuzzyLen);
         let result;
 
-        // symbol in the first
+        // Symbols cannot be the first character in a new line.
+        // In condition that a symbol appears at the beginning of the new line, we will move the last word of this line to the new line.
+        // If there is only one word in this line, we will keep the first character of this word and move the rest of characters to the new line.
         if (WRAP_INSPECTION) {
             if (SYMBOL_REG.test(sLine || tmpText)) {
                 result = LAST_WORD_REG.exec(sText);
@@ -297,9 +503,11 @@ export function fragmentText (stringToken: string, allWidth: number, maxWidth: n
         }
 
         // To judge whether a English words are truncated
+        // If it starts with an English word in the next line and it ends with an English word in this line,
+        // we consider that a complete word is truncated into two lines. The last word without symbols of this line will be moved to the next line.
         if (FIRST_ENGLISH_REG.test(sLine)) {
             result = LAST_ENGLISH_REG.exec(sText);
-            if (result && sText !== result[0]) {
+            if (result && (sText !== result[0])) {
                 fuzzyLen -= result[0].length;
                 sLine = _safeSubstring(text, fuzzyLen);
                 sText = _safeSubstring(text, 0, fuzzyLen);

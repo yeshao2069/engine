@@ -1,12 +1,30 @@
-/**
- * @packageDocumentation
- * @hidden
- */
-import { EDITOR } from 'internal:constants';
+/*
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
+
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+*/
+
+import { EDITOR_NOT_IN_PREVIEW, TEST } from 'internal:constants';
 import { IPhysicsWorld } from '../spec/i-physics-world';
-import { Graphics } from '../../2d';
-import { Node, CCObject, find, director, Vec3, Color, IVec2Like, Vec2, Rect } from '../../core';
-import { Canvas } from '../../2d/framework';
+import { CCObjectFlags, Vec3, Color, IVec2Like, Vec2, Rect, js, errorID } from '../../core';
 import { BuiltinShape2D } from './shapes/shape-2d';
 import { BuiltinBoxShape } from './shapes/box-shape-2d';
 import { BuiltinCircleShape } from './shapes/circle-shape-2d';
@@ -14,24 +32,28 @@ import { BuiltinPolygonShape } from './shapes/polygon-shape-2d';
 import { EPhysics2DDrawFlags, Contact2DType, ERaycast2DType, RaycastResult2D } from '../framework/physics-types';
 import { PhysicsSystem2D, Collider2D } from '../framework';
 import { BuiltinContact } from './builtin-contact';
+import { Node, find } from '../../scene-graph';
+import { director } from '../../game';
+import type { Graphics } from '../../2d/components/graphics';
 
 const contactResults: BuiltinContact[] = [];
 const testIntersectResults: Collider2D[] = [];
 
+/** @mangle */
 export class BuiltinPhysicsWorld implements IPhysicsWorld {
     private _contacts: BuiltinContact[] = [];
     private _shapes: BuiltinShape2D[] = [];
     private _debugGraphics: Graphics | null = null;
     private _debugDrawFlags = 0;
 
-    get debugDrawFlags () {
+    get debugDrawFlags (): number {
         return this._debugDrawFlags;
     }
     set debugDrawFlags (v) {
         this._debugDrawFlags = v;
     }
 
-    shouldCollide (c1: BuiltinShape2D, c2: BuiltinShape2D) {
+    shouldCollide (c1: BuiltinShape2D, c2: BuiltinShape2D): number | boolean {
         const collider1 = c1.collider; const collider2 = c2.collider;
         const collisionMatrix = PhysicsSystem2D.instance.collisionMatrix;
         return (collider1 !== collider2)
@@ -40,7 +62,7 @@ export class BuiltinPhysicsWorld implements IPhysicsWorld {
             && (collisionMatrix[collider2.group] & collider1.group);
     }
 
-    addShape (shape: BuiltinShape2D) {
+    addShape (shape: BuiltinShape2D): void {
         const shapes = this._shapes;
         const index = shapes.indexOf(shape);
         if (index === -1) {
@@ -49,6 +71,8 @@ export class BuiltinPhysicsWorld implements IPhysicsWorld {
                 if (this.shouldCollide(shape, other)) {
                     const contact = new BuiltinContact(shape, other);
                     this._contacts.push(contact);
+                    if (shape._contacts.indexOf(contact) === -1) { shape._contacts.push(contact); }
+                    if (other._contacts.indexOf(contact) === -1) { other._contacts.push(contact); }
                 }
             }
 
@@ -56,12 +80,11 @@ export class BuiltinPhysicsWorld implements IPhysicsWorld {
         }
     }
 
-    removeShape (shape: BuiltinShape2D) {
+    removeShape (shape: BuiltinShape2D): void {
         const shapes = this._shapes;
         const index = shapes.indexOf(shape);
         if (index >= 0) {
-            shapes.splice(index, 1);
-
+            js.array.fastRemoveAt(shapes, index);
             const contacts = this._contacts;
             for (let i = contacts.length - 1; i >= 0; i--) {
                 const contact = contacts[i];
@@ -70,18 +93,27 @@ export class BuiltinPhysicsWorld implements IPhysicsWorld {
                         this._emitCollide(contact, Contact2DType.END_CONTACT);
                     }
 
-                    contacts.splice(i, 1);
+                    js.array.fastRemoveAt(contacts, i);
+
+                    const other = contact.shape1 === shape ? contact.shape2 : contact.shape1;
+                    const contactIndex = other!._contacts.indexOf(contact);
+                    if (contactIndex >= 0) {
+                        js.array.fastRemoveAt(other!._contacts, contactIndex);
+                    }
                 }
             }
         }
+        shape._contacts.length = 0;
     }
 
-    updateShapeGroup (shape: BuiltinShape2D) {
+    updateShapeGroup (shape: BuiltinShape2D): void {
         this.removeShape(shape);
-        this.addShape(shape);
+        if (shape.collider.enabledInHierarchy) {
+            this.addShape(shape);
+        }
     }
 
-    step (deltaTime: number, velocityIterations = 10, positionIterations = 10) {
+    step (deltaTime: number, velocityIterations = 10, positionIterations = 10): void {
         // update collider
         const shapes = this._shapes;
         for (let i = 0, l = shapes.length; i < l; i++) {
@@ -108,19 +140,21 @@ export class BuiltinPhysicsWorld implements IPhysicsWorld {
         }
     }
 
-    drawDebug () {
+    drawDebug (): void {
+        if (TEST) return;
+
         if (!this._debugDrawFlags) {
             return;
         }
 
         this._checkDebugDrawValid();
 
-        const debugDrawer = this._debugGraphics!;
+        const debugDrawer = this._debugGraphics;
         if (!debugDrawer) {
             return;
         }
-
         debugDrawer.clear();
+        debugDrawer.lineWidth = 3;
 
         const shapes = this._shapes;
 
@@ -159,7 +193,7 @@ export class BuiltinPhysicsWorld implements IPhysicsWorld {
         }
     }
 
-    private _emitCollide (contact: BuiltinContact, collisionType?: string) {
+    private _emitCollide (contact: BuiltinContact, collisionType?: string): void {
         collisionType = collisionType || contact.type;
 
         const c1 = contact.shape1!.collider;
@@ -170,32 +204,40 @@ export class BuiltinPhysicsWorld implements IPhysicsWorld {
         c2.emit(collisionType, c2, c1);
     }
 
-    private _checkDebugDrawValid () {
-        if (EDITOR) return;
+    private _checkDebugDrawValid (): void {
+        if (EDITOR_NOT_IN_PREVIEW) return;
         if (!this._debugGraphics || !this._debugGraphics.isValid) {
             let canvas = find('Canvas');
             if (!canvas) {
-                const scene = director.getScene() as any;
+                const scene = director.getScene();
                 if (!scene) {
                     return;
                 }
                 canvas = new Node('Canvas');
-                canvas.addComponent(Canvas);
+                canvas.addComponent('cc.Canvas');
                 canvas.parent = scene;
             }
 
-            const node = new Node('PHYSICS_2D_DEBUG_DRAW');
+            let node: Node | null = new Node('PHYSICS_2D_DEBUG_DRAW');
             // node.zIndex = cc.macro.MAX_ZINDEX;
-            node.hideFlags |= CCObject.Flags.DontSave;
+            node.hideFlags |= CCObjectFlags.DontSave;
             node.parent = canvas;
             node.worldPosition = Vec3.ZERO;
 
-            this._debugGraphics = node.addComponent(Graphics);
-            this._debugGraphics.lineWidth = 2;
+            try {
+                this._debugGraphics = node.addComponent('cc.Graphics') as Graphics;
+                this._debugGraphics.lineWidth = 2;
+            } catch (e: any) {
+                errorID(4501, e.message as string);
+                node.destroy();
+                node = null;
+            }
         }
 
-        const parent = this._debugGraphics.node.parent!;
-        this._debugGraphics.node.setSiblingIndex(parent.children.length - 1);
+        if (this._debugGraphics) {
+            const parent = this._debugGraphics.node.parent!;
+            this._debugGraphics.node.setSiblingIndex(parent.children.length - 1);
+        }
     }
 
     testPoint (p: Vec2): readonly Collider2D[] {
@@ -225,13 +267,21 @@ export class BuiltinPhysicsWorld implements IPhysicsWorld {
     }
 
     // empty implements
-    impl () {
+    impl (): any {
         return null;
     }
-    setGravity () { }
-    setAllowSleep () { }
-    syncPhysicsToScene () { }
-    syncSceneToPhysics () { }
+    setGravity (): void {
+        //empty
+    }
+    setAllowSleep (): void {
+        //empty
+    }
+    syncPhysicsToScene (): void {
+        //empty
+    }
+    syncSceneToPhysics (): void {
+        //empty
+    }
     raycast (p1: IVec2Like, p2: IVec2Like, type: ERaycast2DType): RaycastResult2D[] {
         return [];
     }

@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,7 +20,16 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
+
+type GroupOptions = { name: string; } & Partial<{
+    id: string;
+    name: string;
+    displayOrder: number;
+    style: string;
+}>;
+
+export interface IExposedAttributesUserData extends Record<string, any> { }
 
 export interface IExposedAttributes {
     /**
@@ -51,10 +59,10 @@ export interface IExposedAttributes {
     tooltip?: string;
 
     /**
-     * @en The tab name where this property is organized into, on property inspector.
+     * @en The group name where this property is organized into, on property inspector.
      * @zh 在属性检查器上该属性所属的分类标签名。
      */
-    tab?: string;
+    group?: string | GroupOptions;
 
     /**
      *
@@ -79,12 +87,12 @@ export interface IExposedAttributes {
     /**
      * 当该属性为数值类型时，指定了该属性允许的最小值。
      */
-    min?: number;
+    min?: number | (() => number);
 
     /**
      * 当该属性为数值类型时，指定了该属性允许的最大值。
      */
-    max?: number;
+    max?: number | (() => number);
 
     /**
      * 当该属性为数值类型时并在编辑器中提供了滑动条时，指定了滑动条的步长。
@@ -137,17 +145,15 @@ export interface IExposedAttributes {
     radian?: boolean;
 
     /**
-     * 注意：这是一个内部选项。
-     * 此选项是为了在 `@property` 的基础上精确实现 `@serializable`、`@editable`以及所有新增的独立装饰器的行为。
-     *
-     * 当此字段为 `true` 时。以下规则将不再生效：
-     * - 只要 `@property` 未显式指定选项 `.serializable === false`，就开启序列化；
-     * - 只要 `@property` 未显式指定选项 `.visible === false` 且目标属性的名称不以下划线开头，就开启编辑器交互。
-     * 反之，由以下规则取代：
-     * - 当且仅当 `@property` 显式指定了 `.serializable === true` 时才开启序列化；
-     * - 当且仅当 `@property` 显式指定了 `.visible === true` 时才开启编辑器交互。
+     * @en User custom data, which can be obtained through the `CCClass.attr()` interface.
+     * @zh 用户自定义数据，可以通过 `CCClass.attr()` 接口获取自定义数据。
      */
-    __noImplicit?: boolean;
+    userData?: IExposedAttributesUserData;
+
+    /**
+     * 在允许的情况下，在编辑器中显示为一组单选按钮
+     */
+    radioGroup?: boolean;
 }
 
 export interface IAcceptableAttributes extends IExposedAttributes {

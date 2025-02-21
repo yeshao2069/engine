@@ -1,71 +1,36 @@
-import { EDITOR } from 'internal:constants';
-import { BaseInputEvent } from 'pal/input';
-import { AccelerometerInputSource } from './accelerometer';
-import { InputBox } from './input-box';
-import { KeyboardInputSource } from './keyboard';
-import { MouseInputSource } from './mouse';
-import { TouchInputSource } from './touch';
+/*
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
 
-export class Input {
-    public _touch = new TouchInputSource();
-    public _mouse = new MouseInputSource();
-    public _keyboard = new KeyboardInputSource();
-    public _accelerometer = new AccelerometerInputSource();
-    public _inputBox = new InputBox();
-    private _inputEventList: BaseInputEvent[] = [];
+ https://www.cocos.com/
 
-    constructor () {
-        this._registerEvent();
-    }
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
-    private _registerEvent () {
-        // if (EDITOR) {
-        //     return;
-        // }
-        // TODO: implement event main loop
-        // if (this._touch.support) {
-        //     this._touch.onStart(this._pushEvent);
-        //     this._touch.onMove(this._pushEvent);
-        //     this._touch.onEnd(this._pushEvent);
-        //     this._touch.onCancel(this._pushEvent);
-        // }
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
-        // if (this._mouse.support) {
-        //     this._mouse.onDown(this._pushEvent);
-        //     this._mouse.onMove(this._pushEvent);
-        //     this._mouse.onUp(this._pushEvent);
-        //     this._mouse.onCancel(this._pushEvent);
-        //     this._mouse.onWheel(this._pushEvent);
-        // }
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+*/
 
-        // if (this._keyboard.support) {
-        //     this._keyboard.onDown(this._pushEvent);
-        //     this._keyboard.onUp(this._pushEvent);
-        // }
+import { checkPalIntegrity, withImpl } from '../../integrity-check';
 
-        // if (this._accelerometer.support) {
-        //     this._accelerometer.onChange(this._pushEvent);
-        // }
-    }
+export * from './accelerometer-input';
+export * from './gamepad-input';
+export * from './handle-input';
+export * from './hmd-input';
+export * from './handheld-input';
+export * from './keyboard-input';
+export * from './mouse-input';
+export * from './touch-input';
 
-    private _pushEvent (inputEvent: BaseInputEvent) {
-        this._inputEventList.push(inputEvent);
-    }
-
-    // // accelerometer
-    // public startAccelerometer (): Promise<void>;
-    // public stopAccelerometer (): Promise<void>;
-    // public setAccelerometerInterval (intercal: number): void;
-
-    // // input box
-    // public showInputBox (): Promise<void>;
-    // public hideInputBox (): Promise<void>;
-    // public onInputBoxChange (cb: Function);
-    // public onInputBoxComplete (cb: Function);
-
-    public pollEvent (): BaseInputEvent | undefined {
-        return this._inputEventList.shift();
-    }
-}
-
-export const input = new Input();
+checkPalIntegrity<typeof import('pal/input')>(withImpl<typeof import('./index')>());

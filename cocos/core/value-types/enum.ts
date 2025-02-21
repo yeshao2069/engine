@@ -1,19 +1,18 @@
 /*
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -24,16 +23,15 @@
  THE SOFTWARE.
 */
 
-/**
- * @packageDocumentation
- * @module core/value-types
- */
-
 import { EDITOR, TEST, DEV } from 'internal:constants';
 import { value } from '../utils/js';
 import { legacyCC } from '../global-exports';
 import { errorID } from '../platform/debug';
 import { assertIsTrue } from '../data/utils/asserts';
+
+const hasOwnPropertyProto = Object.prototype.hasOwnProperty;
+
+export type EnumType = Record<string, string | number>;
 
 /**
  * @en
@@ -45,10 +43,12 @@ import { assertIsTrue } from '../data/utils/asserts';
  * 定义一个枚举类型。<br/>
  * 用户可以把枚举值设为任意的整数，如果设为 -1，系统将会分配为上一个枚举值 + 1。
  *
- * @param obj - a JavaScript literal object containing enum names and values, or a TypeScript enum type
- * @return the defined enum type
+ * @param obj
+ * @en A JavaScript literal object containing enum names and values, or a TypeScript enum type.
+ * @zh 包含枚举名和值的 JavaScript literal 对象，或者是一个 TypeScript enum 类型。
+ * @return @en The defined enum type. @zh 定义的枚举类型。
  */
-export function Enum<T> (obj: T): T {
+export function Enum<T extends object> (obj: T): T {
     if ('__enums__' in obj) {
         return obj;
     }
@@ -61,9 +61,9 @@ export function Enum<T> (obj: T): T {
  * Update the enum object properties.
  * @zh
  * 更新枚举对象的属性列表。
- * @param obj
+ * @param obj @en The enum object to update. @zh 需要更新的枚举对象。
  */
-Enum.update = <T> (obj: T): T => {
+Enum.update = <T extends object> (obj: T): T => {
     let lastIndex = -1;
     const keys: string[] = Object.keys(obj);
 
@@ -88,8 +88,8 @@ Enum.update = <T> (obj: T): T => {
         }
     }
     // auto update list if __enums__ is array
-    // @ts-expect-error Injected properties
-    if (Array.isArray(obj.__enums__)) {
+    // NOTE: `__enums__` is injected properties
+    if (Array.isArray((obj as any).__enums__)) {
         updateList(obj);
     }
     return obj;
@@ -115,19 +115,19 @@ interface EnumExtras<EnumT> {
 
 /**
  * Determines if the object is an enum type.
- * @param enumType The object to judge.
+ * @param enumType @en The object to judge. @zh 需要判断的对象。
  */
-Enum.isEnum = <EnumT extends {}>(enumType: EnumT) => enumType && enumType.hasOwnProperty('__enums__');
+Enum.isEnum = <EnumT extends object>(enumType: EnumT): boolean => enumType && hasOwnPropertyProto.call(enumType, '__enums__');
 
-function assertIsEnum <EnumT extends {}> (enumType: EnumT): asserts enumType is EnumT & EnumExtras<EnumT> {
-    assertIsTrue(enumType.hasOwnProperty('__enums__'));
+function assertIsEnum <EnumT extends object> (enumType: EnumT): asserts enumType is EnumT & EnumExtras<EnumT> {
+    assertIsTrue(hasOwnPropertyProto.call(enumType, '__enums__'));
 }
 
 /**
  * Get the enumerators from the enum type.
- * @param enumType An enum type.
+ * @param enumType @en An enum type. @zh 枚举类型。
  */
-Enum.getList = <EnumT extends {}>(enumType: EnumT): readonly Enum.Enumerator<EnumT>[] => {
+Enum.getList = <EnumT extends object>(enumType: EnumT): readonly Enum.Enumerator<EnumT>[] => {
     assertIsEnum(enumType);
 
     if (enumType.__enums__) {
@@ -139,24 +139,46 @@ Enum.getList = <EnumT extends {}>(enumType: EnumT): readonly Enum.Enumerator<Enu
 
 /**
  * Update the enumerators from the enum type.
- * @param enumType - the enum type defined from cc.Enum
+ * @param enumType @en The enum type defined from [[Enum]] @zh 从[[Enum]]定义的枚举类型。
  * @return {Object[]}
  */
-function updateList<EnumT extends {}> (enumType: EnumT): readonly Enum.Enumerator<EnumT>[] {
+function updateList<EnumT extends object> (enumType: EnumT): readonly Enum.Enumerator<EnumT>[] {
     assertIsEnum(enumType);
     const enums: any[] = enumType.__enums__ || [];
     enums.length = 0;
 
+    let isAllInteger = true;
     for (const name in enumType) {
         const v = enumType[name];
-        if (Number.isInteger(v)) {
+        const isIntegerValue = Number.isInteger(v);
+        if (!isIntegerValue) {
+            isAllInteger = false;
+        }
+
+        // Reverse Mapping (value -> name) should not be added to `__enums__` property.
+        if (isIntegerValue || (typeof v === 'string' && enumType[v] !== Number.parseInt(name))) {
             enums.push({ name, value: v });
         }
     }
-    enums.sort((a, b) => a.value - b.value);
+    if (isAllInteger) {
+        enums.sort((a, b): number => a.value - b.value);
+    }
     enumType.__enums__ = enums;
-    return enums;
+    return enums as Enum.Enumerator<EnumT>[];
 }
+
+/**
+ * Reorder the enumerators in the enumeration type by compareFunction.
+ * @param enumType @en The enum type defined from [[Enum]] @zh 从[[Enum]]定义的枚举类型。
+ * @param compareFn @en Function used to determine the order of the elements. @zh 用于确定元素顺序的函数。
+ */
+Enum.sortList = <EnumT extends object> (enumType: EnumT, compareFn: (a, b) => number): void => {
+    assertIsEnum(enumType);
+    if (!Array.isArray(enumType.__enums__)) {
+        return;
+    }
+    enumType.__enums__.sort(compareFn);
+};
 
 if (DEV) {
     // check key order in object literal
@@ -176,9 +198,11 @@ if (DEV) {
  * Formally, as a result of invocation on this function with enum type `enumType`:
  * - `Enum.isEnum(enumType)` returns `true`;
  * - `Enum.getList(enumType)` returns the enumerators of `enumType`.
- * @param enumType An enum type, eg, a kind of type with similar semantic defined by TypeScript.
+ * @param
+ * @en enumType An enum type, eg, a kind of type with similar semantic defined by TypeScript.
+ * @zh 枚举类型，例如 TypeScript 中定义的类型。
  */
-export function ccenum<EnumT extends {}> (enumType: EnumT) {
+export function ccenum<EnumT extends object> (enumType: EnumT): void {
     if (!('__enums__' in enumType)) {
         value(enumType, '__enums__', null, true);
     }

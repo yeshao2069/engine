@@ -1,19 +1,18 @@
 /*
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -32,7 +31,7 @@ import { legacyCC } from '../../global-exports';
 
 export const DELIMETER = '$_$';
 
-export function createAttrsSingle (owner: Object, superAttrs?: any) {
+export function createAttrsSingle (owner: Object, superAttrs?: any): any {
     const attrs = superAttrs ? Object.create(superAttrs) : {};
     value(owner, '__attrs__', attrs);
     return attrs;
@@ -41,7 +40,7 @@ export function createAttrsSingle (owner: Object, superAttrs?: any) {
 /**
  * @param subclass Should not have '__attrs__'.
  */
-export function createAttrs (subclass: any) {
+export function createAttrs (subclass: any): any {
     if (typeof subclass !== 'function') {
         // attributes only in instance
         const instance = subclass;
@@ -69,7 +68,7 @@ export function createAttrs (subclass: any) {
  * Tag the class with any meta attributes, then return all current attributes assigned to it.
  * This function holds only the attributes, not their implementations.
  * @param constructor The class or instance. If instance, the attribute will be dynamic and only available for the specified instance.
- * @param propertyName The name of property or function, used to retrieve the attributes.
+ * @param propertyName The name of the property or function, used to retrieve the attributes.
  * @private
  */
 export function attr (constructor: any, propertyName: string): { [attributeName: string]: any; } {
@@ -85,43 +84,46 @@ export function attr (constructor: any, propertyName: string): { [attributeName:
 }
 
 /**
- * Returns a readonly meta object.
+ * Returns a read-only meta-object.
  */
-export function getClassAttrs (constructor: any) {
+export function getClassAttrs (constructor: any): any {
     return (constructor.hasOwnProperty('__attrs__') && constructor.__attrs__) || createAttrs(constructor);
 }
 
-export function setClassAttr (ctor, propName, key, value) {
+export function setClassAttr (ctor, propName, key, value): void {
     getClassAttrs(ctor)[propName + DELIMETER + key] = value;
 }
 
 export class PrimitiveType<T> {
-    public name: string;
+    public declare name: string;
 
-    public default: T;
+    public declare default: T;
 
     constructor (name: string, defaultValue: T) {
         this.name = name;
         this.default = defaultValue;
     }
 
-    public toString () {
+    public toString (): string {
         return this.name;
     }
 }
 
 /**
+ * @en
+ * Indicates that the editor should treat this property or array element as an Integer value.
+ * @zh
  * 指定编辑器以整数形式对待该属性或数组元素。
- * 例如：
+ * @example
  * ```ts
- * import { CCInteger, _decorator } from "Cocos3D";
+ * import { CCInteger, _decorator } from "cc";
  *
- * // 在 cc 类定义中:
+ * // in the class definition:
  *
- * \@_decorator.property({type: CCInteger})
+ * @_decorator.property({type: CCInteger})
  * count = 0;
  *
- * \@_decorator.property({type: [CCInteger]})
+ * @_decorator.property({type: [CCInteger]})
  * array = [];
  * ```
  */
@@ -130,17 +132,20 @@ legacyCC.Integer = CCInteger;
 legacyCC.CCInteger = CCInteger;
 
 /**
+ * @en
+ * Indicates that the editor should treat this property or array element as a Float value.
+ * @zh
  * 指定编辑器以浮点数形式对待该属性或数组元素。
- * 例如：
+ * @example
  * ```ts
- * import { CCFloat, _decorator } from "Cocos3D";
+ * import { CCFloat, _decorator } from "cc";
  *
- * // 在 cc 类定义中:
+ * // in the class definition:
  *
- * \@_decorator.property({type: CCFloat})
+ * @_decorator.property({type: CCFloat})
  * x = 0;
  *
- * \@_decorator.property({type: [CCFloat]})
+ * @_decorator.property({type: [CCFloat]})
  * array = [];
  * ```
  */
@@ -156,17 +161,19 @@ if (EDITOR) {
 }
 
 /**
+ * @en
+ * Indicates that the editor should treat this property or array element as a Boolean value.
+ * @zh
  * 指定编辑器以布尔值形式对待该属性或数组元素。
- * 例如：
+ *
+ * @example
  * ```ts
- * import { CCBoolean, _decorator } from "Cocos3D";
- *
- * // 在 cc 类定义中:
- *
- * \@_decorator.property({type: CCBoolean})
+ * import { CCBoolean, _decorator } from "cc";
+ * // in the class definition
+ * @_decorator.property({type: CCBoolean})
  * isTrue = false;
  *
- * \@_decorator.property({type: [CCBoolean]})
+ * @_decorator.property({type: [CCBoolean]})
  * array = [];
  * ```
  */
@@ -175,17 +182,20 @@ legacyCC.Boolean = CCBoolean;
 legacyCC.CCBoolean = CCBoolean;
 
 /**
+ * @en
+ * Indicates that the editor should treat this property or array element as a String value.
+ * @zh
  * 指定编辑器以字符串形式对待该属性或数组元素。
- * 例如：
+ * @example
  * ```ts
- * import { CCString, _decorator } from "Cocos3D";
+ * import { CCString, _decorator } from "cc";
  *
- * // 在 cc 类定义中:
+ * // in the class definition
  *
- * \@_decorator.property({type: CCString})
+ * @_decorator.property({type: CCString})
  * name = '';
  *
- * \@_decorator.property({type: [CCString]})
+ * @_decorator.property({type: [CCString]})
  * array = [];
  * ```
  */
@@ -195,7 +205,7 @@ legacyCC.CCString = CCString;
 
 // Ensures the type matches its default value
 export function getTypeChecker_ET (type: string, attributeName: string) {
-    return function (constructor: Function, mainPropertyName: string) {
+    return function (constructor: Function, mainPropertyName: string): void {
         const propInfo = `"${getClassName(constructor)}.${mainPropertyName}"`;
         const mainPropAttrs = attr(constructor, mainPropertyName);
         let mainPropAttrsType = mainPropAttrs.type;
@@ -247,15 +257,19 @@ export function getTypeChecker_ET (type: string, attributeName: string) {
 
 // Ensures the type matches its default value
 export function getObjTypeChecker_ET (typeCtor) {
-    return function (classCtor, mainPropName) {
+    return function (classCtor, mainPropName): void {
         getTypeChecker_ET('Object', 'type')(classCtor, mainPropName);
         // check ValueType
         const defaultDef = getClassAttrs(classCtor)[`${mainPropName + DELIMETER}default`];
         const defaultVal = legacyCC.Class.getDefault(defaultDef);
         if (!Array.isArray(defaultVal) && isChildClassOf(typeCtor, legacyCC.ValueType)) {
             const typename = getClassName(typeCtor);
-            const info = formatStr('No need to specify the "type" of "%s.%s" because %s is a child class of ValueType.',
-                getClassName(classCtor), mainPropName, typename);
+            const info = formatStr(
+                'No need to specify the "type" of "%s.%s" because %s is a child class of ValueType.',
+                getClassName(classCtor),
+                mainPropName,
+                typename,
+            );
             if (defaultDef) {
                 log(info);
             } else {

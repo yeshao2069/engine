@@ -1,10 +1,34 @@
-import { system } from 'pal/system';
-import { AudioEvent, AudioState, AudioType } from '../type';
-import { EventTarget } from '../../../cocos/core/event/event-target';
-import { legacyCC } from '../../../cocos/core/global-exports';
+/*
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
+
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+*/
+
+import { systemInfo } from 'pal/system-info';
+import { AudioEvent, AudioState, AudioPCMDataView, AudioType } from '../type';
+import { EventTarget } from '../../../cocos/core/event';
 import { clamp, clamp01 } from '../../../cocos/core';
 import { enqueueOperation, OperationInfo, OperationQueueable } from '../operation-queue';
-import { BrowserType, OS } from '../../system/enum-type';
+import { BrowserType, OS } from '../../system-info/enum-type';
+import { Game, game } from '../../../cocos/game';
 
 function ensurePlaying (domAudio: HTMLAudioElement): Promise<void> {
     return new Promise((resolve) => {
@@ -12,14 +36,18 @@ function ensurePlaying (domAudio: HTMLAudioElement): Promise<void> {
         if (promise === undefined) {  // Chrome50/Firefox53 below
             return resolve();
         }
-        promise.then(resolve).catch(() => {
-            const onGesture = () => {
-                domAudio.play().catch((e) => {});
+        promise.then(resolve).catch((): void => {
+            const onGesture = (): void => {
+                domAudio.play().then(() => {
+                    // HACK NOTE: if the user slide after touch start, the context cannot be resumed correctly.
+                    canvas?.removeEventListener('touchend', onGesture, { capture: true });
+                    canvas?.removeEventListener('mouseup', onGesture, { capture: true });
+                }).catch((e) => {});
                 resolve();
             };
             const canvas = document.getElementById('GameCanvas') as HTMLCanvasElement;
-            canvas?.addEventListener('touchend', onGesture, { once: true });
-            canvas?.addEventListener('mousedown', onGesture, { once: true });
+            canvas?.addEventListener('touchend', onGesture, { capture: true });
+            canvas?.addEventListener('mouseup', onGesture, { capture: true });
         });
         return null;
     });
@@ -28,7 +56,7 @@ function ensurePlaying (domAudio: HTMLAudioElement): Promise<void> {
 export class OneShotAudioDOM {
     private _domAudio: HTMLAudioElement;
     private _onPlayCb?: () => void;
-    get onPlay () {
+    get onPlay (): (() => void) | undefined {
         return this._onPlayCb;
     }
     set onPlay (cb) {
@@ -36,7 +64,7 @@ export class OneShotAudioDOM {
     }
 
     private _onEndCb?: () => void;
-    get onEnd () {
+    get onEnd (): (() => void) | undefined {
         return this._onEndCb;
     }
     set onEnd (cb) {
@@ -66,37 +94,24 @@ export class OneShotAudioDOM {
 export class AudioPlayerDOM implements OperationQueueable {
     private _domAudio: HTMLAudioElement;
     private _state: AudioState = AudioState.INIT;
-    private _onHide?: () => void;
-    private _onShow?: () => void;
-    private _onEnded?: () => void;
+    private _onEnded: () => void;
 
-    // NOTE: the implemented interface properties need to be public access
+    /**
+     * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
+     */
     public _eventTarget: EventTarget = new EventTarget();
+    /**
+     * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
+     */
     public _operationQueue: OperationInfo[] = [];
 
     constructor (nativeAudio: HTMLAudioElement) {
         this._domAudio = nativeAudio;
 
         // event
-        // TODO: should not call engine API in pal
-        this._onHide = () => {
-            if (this._state === AudioState.PLAYING) {
-                this.pause().then(() => {
-                    this._state = AudioState.INTERRUPTED;
-                    this._eventTarget.emit(AudioEvent.INTERRUPTION_BEGIN);
-                }).catch((e) => {});
-            }
-        };
-        legacyCC.game.on(legacyCC.Game.EVENT_HIDE, this._onHide);
-        this._onShow = () => {
-            if (this._state === AudioState.INTERRUPTED) {
-                this.play().then(() => {
-                    this._eventTarget.emit(AudioEvent.INTERRUPTION_END);
-                }).catch((e) => {});
-            }
-        };
-        legacyCC.game.on(legacyCC.Game.EVENT_SHOW, this._onShow);
-        this._onEnded = () => {
+        game.on(Game.EVENT_PAUSE, this._onInterruptedBegin, this);
+        game.on(Game.EVENT_RESUME, this._onInterruptedEnd, this);
+        this._onEnded = (): void => {
             this.seek(0).catch((e) => {});
             this._state = AudioState.INIT;
             this._eventTarget.emit(AudioEvent.ENDED);
@@ -104,39 +119,29 @@ export class AudioPlayerDOM implements OperationQueueable {
         this._domAudio.addEventListener('ended', this._onEnded);
     }
 
-    destroy () {
-        if (this._onShow) {
-            legacyCC.game.off(legacyCC.Game.EVENT_SHOW, this._onShow);
-            this._onShow = undefined;
-        }
-        if (this._onHide) {
-            legacyCC.game.off(legacyCC.Game.EVENT_HIDE, this._onHide);
-            this._onHide = undefined;
-        }
-        if (this._onEnded) {
-            this._domAudio.removeEventListener('ended', this._onEnded);
-            this._onEnded = undefined;
-        }
-        // @ts-expect-error need to release DOM Audio instance
-        this._domAudio = undefined;
+    destroy (): void {
+        game.off(Game.EVENT_PAUSE, this._onInterruptedBegin, this);
+        game.off(Game.EVENT_RESUME, this._onInterruptedEnd, this);
+        this._domAudio.removeEventListener('ended', this._onEnded);
+        // NOTE: need to release DOM Audio instance
+        this._domAudio = null as any;
     }
     static load (url: string): Promise<AudioPlayerDOM> {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             AudioPlayerDOM.loadNative(url).then((domAudio) => {
                 resolve(new AudioPlayerDOM(domAudio));
-            }).catch((e) => {});
+            }).catch(reject);
         });
     }
     static loadNative (url: string): Promise<HTMLAudioElement> {
         return new Promise((resolve, reject) => {
             const domAudio = document.createElement('audio');
-            const sys = legacyCC.sys;
             let loadedEvent = 'canplaythrough';
-            if (system.os === OS.IOS) {
+            if (systemInfo.os === OS.IOS) {
                 // iOS no event that used to parse completed callback
                 // this time is not complete, can not play
                 loadedEvent = 'loadedmetadata';
-            } else if (system.browserType === BrowserType.FIREFOX) {
+            } else if (systemInfo.browserType === BrowserType.FIREFOX) {
                 loadedEvent = 'canplay';
             }
 
@@ -147,19 +152,19 @@ export class AudioPlayerDOM implements OperationQueueable {
                     success();
                 }
             }, 8000);
-            const clearEvent = () => {
+            const clearEvent = (): void => {
                 clearTimeout(timer);
                 domAudio.removeEventListener(loadedEvent, success, false);
                 domAudio.removeEventListener('error', failure, false);
             };
-            const success = () => {
+            const success = (): void => {
                 clearEvent();
                 resolve(domAudio);
             };
-            const failure = () => {
+            const failure = (): void => {
                 clearEvent();
                 const message = `load audio failure - ${url}`;
-                reject(message);
+                reject(new Error(message));
             };
             domAudio.addEventListener(loadedEvent, success, false);
             domAudio.addEventListener('error', failure, false);
@@ -169,11 +174,27 @@ export class AudioPlayerDOM implements OperationQueueable {
     static loadOneShotAudio (url: string, volume: number): Promise<OneShotAudioDOM> {
         return new Promise((resolve, reject) => {
             AudioPlayerDOM.loadNative(url).then((domAudio) => {
-                // @ts-expect-error AudioPlayer should be a friend class in OneShotAudio
-                const oneShotAudio = new OneShotAudioDOM(domAudio, volume);
+                // HACK: AudioPlayer should be a friend class in OneShotAudio
+                const oneShotAudio = new (OneShotAudioDOM as any)(domAudio, volume);
                 resolve(oneShotAudio);
             }).catch(reject);
         });
+    }
+
+    private _onInterruptedBegin (): void {
+        if (this._state === AudioState.PLAYING) {
+            this.pause().then(() => {
+                this._state = AudioState.INTERRUPTED;
+                this._eventTarget.emit(AudioEvent.INTERRUPTION_BEGIN);
+            }).catch((e) => {});
+        }
+    }
+    private _onInterruptedEnd (): void {
+        if (this._state === AudioState.INTERRUPTED) {
+            this.play().then(() => {
+                this._eventTarget.emit(AudioEvent.INTERRUPTION_END);
+            }).catch((e) => {});
+        }
     }
 
     get src (): string {
@@ -203,6 +224,14 @@ export class AudioPlayerDOM implements OperationQueueable {
     }
     get currentTime (): number {
         return this._domAudio.currentTime;
+    }
+
+    get sampleRate (): number {
+        return 0;
+    }
+
+    public getPCMData (channelIndex: number): AudioPCMDataView | undefined {
+        return undefined;
     }
 
     @enqueueOperation
@@ -239,10 +268,10 @@ export class AudioPlayerDOM implements OperationQueueable {
         });
     }
 
-    onInterruptionBegin (cb: () => void) { this._eventTarget.on(AudioEvent.INTERRUPTION_BEGIN, cb); }
-    offInterruptionBegin (cb?: () => void) { this._eventTarget.off(AudioEvent.INTERRUPTION_BEGIN, cb); }
-    onInterruptionEnd (cb: () => void) { this._eventTarget.on(AudioEvent.INTERRUPTION_END, cb); }
-    offInterruptionEnd (cb?: () => void) { this._eventTarget.off(AudioEvent.INTERRUPTION_END, cb); }
-    onEnded (cb: () => void) { this._eventTarget.on(AudioEvent.ENDED, cb); }
-    offEnded (cb?: () => void) { this._eventTarget.off(AudioEvent.ENDED, cb); }
+    onInterruptionBegin (cb: () => void): void { this._eventTarget.on(AudioEvent.INTERRUPTION_BEGIN, cb); }
+    offInterruptionBegin (cb?: () => void): void { this._eventTarget.off(AudioEvent.INTERRUPTION_BEGIN, cb); }
+    onInterruptionEnd (cb: () => void): void { this._eventTarget.on(AudioEvent.INTERRUPTION_END, cb); }
+    offInterruptionEnd (cb?: () => void): void { this._eventTarget.off(AudioEvent.INTERRUPTION_END, cb); }
+    onEnded (cb: () => void): void { this._eventTarget.on(AudioEvent.ENDED, cb); }
+    offEnded (cb?: () => void): void { this._eventTarget.off(AudioEvent.ENDED, cb); }
 }

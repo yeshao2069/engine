@@ -2,16 +2,16 @@
  Copyright (c) 2008-2010 Ricardo Quesada
  Copyright (c) 2011-2012 cocos2d-x.org
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos2d-x.org
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
- in the Software without restriction, including without limitation the rights
- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- copies of the Software, and to permit persons to whom the Software is
- furnished to do so, subject to the following conditions:
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
  The above copyright notice and this permission notice shall be included in
  all copies or substantial portions of the Software.
@@ -25,8 +25,7 @@
  THE SOFTWARE.
 */
 
-import * as jsarray from './array';
-import IDGenerator from './id-generator';
+import { IDGenerator } from './id-generator';
 import {
     _idToClass,
     _nameToClass,
@@ -40,7 +39,9 @@ import {
     formatStr,
     get,
     getClassByName,
+    getClassById,
     getClassName,
+    getClassId,
     getPropertyDescriptor,
     getset,
     getSuper,
@@ -58,19 +59,22 @@ import {
     unregisterClass,
     value,
 } from './js-typed';
-import Pool from './pool';
-
+import { Pool } from './pool';
+import * as array from './array';
 import { legacyCC } from '../global-exports';
 
 export * from './js-typed';
-export { default as IDGenerator } from './id-generator';
-export { default as Pool } from './pool';
-export const array = jsarray;
+export { IDGenerator } from './id-generator';
+export { Pool } from './pool';
+export { array };
 
+/**
+ * @deprecated since v3.7.0, `js.js` is deprecated, please access `js` directly instead.
+ */
 export const js = {
     IDGenerator,
     Pool,
-    array: jsarray,
+    array,
     isNumber,
     isString,
     isEmptyObject,
@@ -90,10 +94,11 @@ export const js = {
     setClassName,
     setClassAlias,
     getClassByName,
+    getClassById,
     /**
      * @en All classes registered in the engine, indexed by name.
      * @zh 引擎中已注册的所有类型，通过名称进行索引。
-     * @private
+     * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
      * @example
      * ```
      * import { js } from 'cc';
@@ -106,6 +111,8 @@ export const js = {
      * js._registeredClassIds = builtinClassIds;
      * js._registeredClassNames = builtinClassNames;
      * ```
+     *
+     * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
      */
     get _registeredClassNames (): typeof _nameToClass {
         return { ..._nameToClass };
@@ -117,7 +124,6 @@ export const js = {
     /**
      * @en All classes registered in the engine, indexed by ID.
      * @zh 引擎中已注册的所有类型，通过 ID 进行索引。
-     * @private
      * @example
      * ```
      * import { js } from 'cc';
@@ -130,6 +136,8 @@ export const js = {
      * js._registeredClassIds = builtinClassIds;
      * js._registeredClassNames = builtinClassNames;
      * ```
+     *
+     * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
      */
     get _registeredClassIds (): typeof _idToClass {
         return { ..._idToClass };
@@ -138,8 +146,18 @@ export const js = {
         clear(_idToClass);
         Object.assign(_idToClass, value);
     },
+    /**
+     * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
+     */
     _getClassId,
+    getClassId,
+    /**
+     * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
+     */
     _setClassId,
+    /**
+     * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
+     */
     _getClassById,
     obsolete,
     obsoletes,

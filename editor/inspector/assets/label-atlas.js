@@ -1,7 +1,11 @@
-exports.template = `
+'use strict';
+
+const { updateElementReadonly, updateElementInvalid } = require('../utils/assets');
+
+exports.template = /* html */`
 <section class="asset-label-atlas">
     <div class="content">
-        <ui-prop is="asset">
+        <ui-prop ui="asset">
             <ui-label slot="label"
                 tooltip="i18n:ENGINE.assets.label-atlas.SpriteFrameTip"
                 value="i18n:ENGINE.assets.label-atlas.SpriteFrame"
@@ -48,54 +52,12 @@ exports.template = `
 </section>
 `;
 
-const Elements = {
-    spriteFrame: {
-        ready() {
-            this.$.spriteFrame.addEventListener('confirm', this.dataChange.bind(this, 'spriteFrameUuid'));
-        },
-        update() {
-            this.$.spriteFrame.value = this.meta.userData.spriteFrameUuid;
-            this.updateInvalid(this.$.spriteFrame, 'spriteFrameUuid');
-            this.updateReadonly(this.$.spriteFrame);
-        },
-    },
-    itemWidth: {
-        ready() {
-            this.$.itemWidth.addEventListener('change', this.dataChange.bind(this, 'itemWidth'));
-        },
-        update() {
-            this.$.itemWidth.value = this.meta.userData.itemWidth;
-            this.updateInvalid(this.$.itemWidth, 'itemWidth');
-            this.updateReadonly(this.$.itemWidth);
-        },
-    },
-    itemHeight: {
-        ready() {
-            this.$.itemHeight.addEventListener('change', this.dataChange.bind(this, 'itemHeight'));
-        },
-        update() {
-            this.$.itemHeight.value = this.meta.userData.itemHeight;
-            this.updateInvalid(this.$.itemHeight, 'itemHeight');
-            this.updateReadonly(this.$.itemHeight);
-        },
-    },
-    startChar: {
-        ready() {
-            this.$.startChar.addEventListener('change', this.dataChange.bind(this, 'startChar'));
-        },
-        update() {
-            this.$.startChar.value = this.meta.userData.startChar;
-            this.updateInvalid(this.$.startChar, 'startChar');
-            this.updateReadonly(this.$.startChar);
-        },
-    },
-    fontSize: {
-        update() {
-            this.$.fontSize.value = this.meta.userData.fontSize;
-            this.updateInvalid(this.$.fontSize, 'fontSize');
-        },
-    },
-};
+
+exports.style = /* css */`
+.asset-label-atlas {
+    padding-right: 4px;
+}
+`;
 
 exports.$ = {
     spriteFrame: '#spriteFrame',
@@ -105,21 +67,69 @@ exports.$ = {
     fontSize: '#fontSize',
 };
 
+const Elements = {
+    spriteFrame: {
+        ready() {
+            this.$.spriteFrame.addEventListener('confirm', (event) => {
+                this.change.call(this, 'spriteFrameUuid', event);
+                this.dispatch('snapshot');
+            });
+        },
+        update() {
+            this.$.spriteFrame.value = this.meta.userData.spriteFrameUuid;
+            updateElementInvalid.call(this, this.$.spriteFrame, 'spriteFrameUuid');
+            updateElementReadonly.call(this, this.$.spriteFrame);
+        },
+    },
+    itemWidth: {
+        ready() {
+            this.$.itemWidth.addEventListener('change', this.change.bind(this, 'itemWidth'));
+            this.$.itemWidth.addEventListener('confirm', () => {
+                this.dispatch('snapshot');
+            });
+        },
+        update() {
+            this.$.itemWidth.value = this.meta.userData.itemWidth;
+            updateElementInvalid.call(this, this.$.itemWidth, 'itemWidth');
+            updateElementReadonly.call(this, this.$.itemWidth);
+        },
+    },
+    itemHeight: {
+        ready() {
+            this.$.itemHeight.addEventListener('change', this.change.bind(this, 'itemHeight'));
+            this.$.itemHeight.addEventListener('confirm', () => {
+                this.dispatch('snapshot');
+            });
+        },
+        update() {
+            this.$.itemHeight.value = this.meta.userData.itemHeight;
+            updateElementInvalid.call(this, this.$.itemHeight, 'itemHeight');
+            updateElementReadonly.call(this, this.$.itemHeight);
+        },
+    },
+    startChar: {
+        ready() {
+            this.$.startChar.addEventListener('change', this.change.bind(this, 'startChar'));
+            this.$.startChar.addEventListener('confirm', () => {
+                this.dispatch('snapshot');
+            });
+        },
+        update() {
+            this.$.startChar.value = this.meta.userData.startChar;
+            updateElementInvalid.call(this, this.$.startChar, 'startChar');
+            updateElementReadonly.call(this, this.$.startChar);
+        },
+    },
+    fontSize: {
+        update() {
+            this.$.fontSize.value = this.meta.userData.fontSize;
+            updateElementReadonly.call(this, this.$.fontSize, 'fontSize');
+        },
+    },
+};
+
 exports.methods = {
-    updateInvalid(element, prop) {
-        const invalid = this.metaList.some((meta) => {
-            return meta.userData[prop] !== this.meta.userData[prop];
-        });
-        element.invalid = invalid;
-    },
-    updateReadonly(element) {
-        if (this.asset.readonly) {
-            element.setAttribute('disabled', true);
-        } else {
-            element.removeAttribute('disabled');
-        }
-    },
-    dataChange(key, event) {
+    change(key, event) {
         this.metaList.forEach((meta) => {
             meta.userData[key] = event.target.value;
         });
@@ -127,7 +137,7 @@ exports.methods = {
     },
 };
 
-exports.ready = function () {
+exports.ready = function() {
     for (const key in Elements) {
         if (Elements[key].ready) {
             Elements[key].ready.call(this);
@@ -135,7 +145,7 @@ exports.ready = function () {
     }
 };
 
-exports.update = function (assetList, metaList) {
+exports.update = function(assetList, metaList) {
     this.metaList = metaList;
     this.assetList = assetList;
     this.meta = metaList[0];

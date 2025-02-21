@@ -1,19 +1,18 @@
 /*
  Copyright (c) 2017-2018 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and  non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Chukong Aipu reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -22,59 +21,35 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
-/**
- * @packageDocumentation
- * @module particle2d
- */
+import { JSB } from 'internal:constants';
+import type { IAssembler, IAssemblerManager } from '../2d/renderer/base';
+import { MotionStreak, Point } from './motion-streak-2d';
+import { Vec2, Color } from '../core';
+import type { IBatcher } from '../2d/renderer/i-batcher';
+import type { RenderData } from '../2d/renderer/render-data';
 
-import { IAssembler, IAssemblerManager } from '../2d/renderer/base';
-import { MotionStreak } from './motion-streak-2d';
-import { Vec2, Color } from '../core/math';
-import { Batcher2D } from '../2d/renderer/batcher-2d';
-
-const _tangent = new Vec2();
-// const _miter = new Vec2();
 const _normal = new Vec2();
 const _vec2 = new Vec2();
+let QUAD_INDICES: Uint16Array | null = null;
 
-function normal (out:Vec2, dir:Vec2) {
+function normal (out: Vec2, dir: Vec2): Vec2 {
     // get perpendicular
     out.x = -dir.y;
     out.y = dir.x;
     return out;
 }
 
-function computeMiter (miter, lineA, lineB, halfThick, maxMultiple) {
-    // get tangent line
-    lineA.add(lineB, _tangent);
-    _tangent.normalize();
-
-    // get miter as a unit vector
-    miter.x = -_tangent.y;
-    miter.y = _tangent.x;
-    _vec2.x = -lineA.y;
-    _vec2.y = lineA.x;
-
-    // get the necessary length of our miter
-    let multiple = 1 / miter.dot(_vec2);
-    if (maxMultiple) {
-        multiple = Math.min(multiple, maxMultiple);
-    }
-    return halfThick * multiple;
-}
-
-export const MotionStreakAssembler: IAssembler = {
-    createData (comp: MotionStreak) {
+class MotionStreakAssembler implements IAssembler {
+    createData (comp: MotionStreak): RenderData {
         const renderData = comp.requestRenderData();
         renderData.dataLength = 4;
-        renderData.vertexCount = 16;
-        renderData.indicesCount = (16 - 2) * 3;
+        renderData.resize(16, (16 - 2) * 3);
         return renderData;
-    },
+    }
 
-    update (comp: MotionStreak, dt: number) {
+    update (comp: MotionStreak, dt: number): void {
         const stroke = comp.stroke / 2;
 
         const node = comp.node;
@@ -84,7 +59,7 @@ export const MotionStreakAssembler: IAssembler = {
 
         const points = comp.points;
 
-        let cur;
+        let cur: Point | undefined;
         if (points.length > 1) {
             const point = points[0];
             const difx = point.point.x - tx;
@@ -95,22 +70,22 @@ export const MotionStreakAssembler: IAssembler = {
         }
 
         if (!cur) {
-            cur = new MotionStreak.Point();
-            points.splice(0, 0, cur);
+            cur = new Point();
+            points.unshift(cur);
         }
 
         cur.setPoint(tx, ty);
         cur.time = comp.fadeTime + dt;
 
-        let verticesCount = 0;
-        let indicesCount = 0;
+        let vertexCount = 0;
+        let indexCount = 0;
 
         if (points.length < 2) {
             return;
         }
 
         const renderData = comp.renderData!;
-
+        this.updateRenderDataCache(comp, renderData);
         const color = comp.color;
         const cr = color.r;
         const cg = color.g;
@@ -156,15 +131,14 @@ export const MotionStreakAssembler: IAssembler = {
             normal(_normal, dir);
 
             const da = progress * ca;
-            const c = ((da << 24) >>> 0) + (cb << 16) + (cg << 8) + cr;
 
-            let offset = verticesCount;
+            let offset = vertexCount;
 
             data[offset].x = point.x + _normal.x * stroke;
             data[offset].y = point.y + _normal.y * stroke;
             data[offset].u = 1;
             data[offset].v = progress;
-            data[offset].color._val = c;
+            data[offset].color.set(cr, cg, cb, da);
 
             offset += 1;
 
@@ -172,69 +146,135 @@ export const MotionStreakAssembler: IAssembler = {
             data[offset].y = point.y - _normal.y * stroke;
             data[offset].u = 0;
             data[offset].v = progress;
-            data[offset].color._val = c;
+            data[offset].color.set(cr, cg, cb, da);
 
-            verticesCount += 2;
+            vertexCount += 2;
         }
 
-        indicesCount = verticesCount <= 2 ? 0 : (verticesCount - 2) * 3;
+        indexCount = vertexCount <= 2 ? 0 : (vertexCount - 2) * 3;
 
-        renderData.vertexCount = verticesCount;
-        renderData.indicesCount = indicesCount;
-    },
+        renderData.resize(vertexCount, indexCount); // resize
+        if (JSB) {
+            const indexCount = renderData.indexCount;
+            this.createQuadIndices(comp, indexCount);
+            renderData.chunk.setIndexBuffer(QUAD_INDICES!);
 
-    updateRenderData (comp: MotionStreak) {
-    },
+            //  Fill all dataList to vData
+            this.updateWorldVertexAllData(comp);
 
-    fillBuffers (comp: MotionStreak, renderer: Batcher2D) {
+            renderData.updateRenderData(comp, comp.texture!);
+            comp._markForUpdateRenderData();
+        }
+    }
+
+    private updateWorldVertexAllData (comp: MotionStreak): void {
         const renderData = comp.renderData!;
+        const stride = renderData.floatStride;
         const dataList = renderData.data;
-        const node = comp.node;
-
-        let buffer = renderer.acquireBufferBatch()!;
-        let vertexOffset = buffer.byteOffset >> 2;
-        let indicesOffset = buffer.indicesOffset;
-        let vertexId = buffer.vertexOffset;
-        const isRecreate = buffer.request(renderData.vertexCount, renderData.indicesCount);
-        if (!isRecreate) {
-            buffer = renderer.currBufferBatch!;
-            indicesOffset = 0;
-            vertexId = 0;
+        const vData = renderData.chunk.vb;
+        for (let i  = 0; i < dataList.length; i++) {
+            const offset = i * stride;
+            vData[offset + 0] = dataList[i].x;
+            vData[offset + 1] = dataList[i].y;
+            vData[offset + 2] = dataList[i].z;
+            vData[offset + 3] = dataList[i].u;
+            vData[offset + 4] = dataList[i].v;
+            Color.toArray(vData, dataList[i].color, offset + 5);
         }
+    }
 
-        // buffer data may be reallocated, need get reference after request.
-        const vBuf = buffer.vData!;
-        const iBuf = buffer.iData!;
+    private createQuadIndices (comp: MotionStreak, indexCount: number): void {
+        const renderData = comp.renderData!;
+        const chunk = renderData.chunk;
+        const vid = 0;
+        const meshBuffer = chunk.meshBuffer;
+        let indexOffset = meshBuffer.indexOffset;
+        QUAD_INDICES = null;
+        QUAD_INDICES = new Uint16Array(indexCount);
+        for (let i = 0, l = indexCount; i < l; i += 2) {
+            const start = vid + i;
+            QUAD_INDICES[indexOffset++] = start;
+            QUAD_INDICES[indexOffset++] = start + 2;
+            QUAD_INDICES[indexOffset++] = start + 1;
+            QUAD_INDICES[indexOffset++] = start + 1;
+            QUAD_INDICES[indexOffset++] = start + 2;
+            QUAD_INDICES[indexOffset++] = start + 3;
+        }
+    }
+
+    private updateRenderDataCache (comp: MotionStreak, renderData: RenderData): void {
+        if (renderData.passDirty) {
+            renderData.updatePass(comp);
+        }
+        if (renderData.nodeDirty) {
+            renderData.updateNode(comp);
+        }
+        if (renderData.textureDirty && comp.texture) {
+            renderData.updateTexture(comp.texture);
+            renderData.material = comp.getRenderMaterial(0);
+        }
+        if (renderData.hashDirty) {
+            renderData.updateHash();
+        }
+    }
+
+    updateRenderData (comp: MotionStreak): void {
+        if (JSB) {
+            // A dirty hack
+            // The world matrix was updated in advance and needs to be avoided at the cpp level
+            // Need a flag to explicitly not update the world transform to solve this problem
+            comp.renderData!.renderDrawInfo.setVertDirty(false);
+            comp.node.hasChangedFlags = 0;
+        }
+    }
+
+    fillBuffers (comp: MotionStreak, renderer: IBatcher): void {
+        const renderData = comp.renderData!;
+        const chunk = renderData.chunk;
+        const dataList = renderData.data;
+
         const vertexCount = renderData.vertexCount;
-        const indicesCount = renderData.indicesCount;
+        const indexCount = renderData.indexCount;
 
+        const vData = chunk.vb;
+        let vertexOffset = 0;
         for (let i = 0; i < vertexCount; i++) {
             const vert = dataList[i];
-            vBuf[vertexOffset++] = vert.x;
-            vBuf[vertexOffset++] = vert.y;
-            vBuf[vertexOffset++] = vert.z;
-            vBuf[vertexOffset++] = vert.u;
-            vBuf[vertexOffset++] = vert.v;
-            Color.toArray(vBuf, vert.color, vertexOffset);
+            vData[vertexOffset++] = vert.x;
+            vData[vertexOffset++] = vert.y;
+            vData[vertexOffset++] = vert.z;
+            vData[vertexOffset++] = vert.u;
+            vData[vertexOffset++] = vert.v;
+            Color.toArray(vData, vert.color, vertexOffset);
             vertexOffset += 4;
         }
 
         // fill index data
-        for (let i = 0, l = indicesCount; i < l; i += 2) {
-            const start = vertexId + i;
-            iBuf[indicesOffset++] = start;
-            iBuf[indicesOffset++] = start + 2;
-            iBuf[indicesOffset++] = start + 1;
-            iBuf[indicesOffset++] = start + 1;
-            iBuf[indicesOffset++] = start + 2;
-            iBuf[indicesOffset++] = start + 3;
+        const bid = chunk.bufferId;
+        const vid = chunk.vertexOffset;
+        const meshBuffer = chunk.meshBuffer;
+        const ib = chunk.meshBuffer.iData;
+        let indexOffset = meshBuffer.indexOffset;
+        for (let i = 0, l = indexCount; i < l; i += 2) {
+            const start = vid + i;
+            ib[indexOffset++] = start;
+            ib[indexOffset++] = start + 2;
+            ib[indexOffset++] = start + 1;
+            ib[indexOffset++] = start + 1;
+            ib[indexOffset++] = start + 2;
+            ib[indexOffset++] = start + 3;
         }
-    },
-};
+
+        meshBuffer.indexOffset += renderData.indexCount;
+        meshBuffer.setDirty();
+    }
+}
+
+const motionStreakAssembler = new MotionStreakAssembler();
 
 export const MotionStreakAssemblerManager: IAssemblerManager = {
-    getAssembler (comp: MotionStreak) {
-        return MotionStreakAssembler;
+    getAssembler (comp: MotionStreak): IAssembler {
+        return motionStreakAssembler;
     },
 };
 

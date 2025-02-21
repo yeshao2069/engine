@@ -126,20 +126,26 @@ if (cc.internal.VideoPlayer) {
             return this.video.duration();
         }
 
-        syncPlaybackRate() {
-            cc.warn('The platform does not support');
+        syncPlaybackRate(value) {
+            if (this.video) {
+                this.video.setPlaybackRate(value);
+            }
         }
 
         syncVolume() {
             cc.warn('The platform does not support');
         }
 
-        syncMute() {
-            cc.warn('The platform does not support');
+        syncMute(enable) {
+            if (this.video && this.video.muted !== enable) {
+                this.video.setMute(enable);
+            }
         }
 
-        syncLoop() {
-            cc.warn('The platform does not support');
+        syncLoop(enable) {
+            if (this.video && this.video.loop !== enable) {
+                this.video.setLoop(enable);
+            }
         }
 
         syncStayOnBottom() {
@@ -148,7 +154,8 @@ if (cc.internal.VideoPlayer) {
 
         getCurrentTime() {
             if (this.video) {
-                return this.video.currentTime();
+                this._cachedCurrentTime = this.video.currentTime();
+                return this._cachedCurrentTime;
             }
             return -1;
         }
@@ -157,6 +164,7 @@ if (cc.internal.VideoPlayer) {
             let video = this._video;
             if (!video) return;
             video.seekTo(val);
+            this._cachedCurrentTime = val;
         }
 
         disable(noPause) {

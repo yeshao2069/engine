@@ -1,19 +1,18 @@
 /*
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -24,27 +23,16 @@
  THE SOFTWARE.
 */
 
-/**
- * @packageDocumentation
- * @module ui
- */
-
 import { ccclass, help, executionOrder, menu, tooltip, requireComponent, executeInEditMode, serializable } from 'cc.decorator';
-import { Component } from '../../core/components/component';
-import { Color, Vec2 } from '../../core/math';
+import { Component } from '../../scene-graph/component';
+import { Color, Vec2, assertIsTrue } from '../../core';
 import { Label } from './label';
-import { legacyCC } from '../../core/global-exports';
 
 /**
- * @en Shadow effect for Label component, only for system fonts or TTF fonts
- * @zh 用于给 Label 组件添加阴影效果，只能用于系统字体或 ttf 字体
- * @example
- * import { Node, Label, LabelShadow } from 'cc';
- * // Create a new node and add label components.
- * const node = new Node("New Label");
- * const label = node.addComponent(Label);
- * const shadow = node.addComponent(LabelShadow);
- * node.parent = this.node;
+ * @en Shadow effect for Label component, only for system fonts or TTF fonts.
+ * @zh 用于给 Label 组件添加阴影效果，只能用于系统字体或 ttf 字体。
+ *
+ * @deprecated since v3.8.2, please use [[Label.enableShadow]] instead.
  */
 @ccclass('cc.LabelShadow')
 @help('i18n:cc.LabelShadow')
@@ -53,13 +41,6 @@ import { legacyCC } from '../../core/global-exports';
 @requireComponent(Label)
 @executeInEditMode
 export class LabelShadow extends Component {
-    @serializable
-    protected _color = new Color(0, 0, 0, 255);
-    @serializable
-    protected _offset = new Vec2(2, 2);
-    @serializable
-    protected _blur = 2;
-
     /**
      * @en
      * Shadow color.
@@ -67,83 +48,80 @@ export class LabelShadow extends Component {
      * @zh
      * 阴影的颜色。
      *
-     * @example
-     * ```ts
-     * import { Color } from 'cc';
-     * labelShadow.color = new Color(0.5, 0.3, 0.7, 1.0);
-     * ```
+     * @deprecated since v3.8.2, please use [[Label.shadowColor]] instead.
      */
     @tooltip('i18n:labelShadow.color')
     get color (): Readonly<Color> {
-        return this._color;
+        const label = this.node.getComponent(Label);
+        assertIsTrue(label);
+        return label.shadowColor;
     }
 
     set color (value) {
-        if (this._color === value) {
-            return;
-        }
-
-        this._color.set(value);
-        this._updateRenderData();
+        const label = this.node.getComponent(Label);
+        assertIsTrue(label);
+        label.shadowColor = value;
     }
 
     /**
      * @en
-     * Offset between font and shadow
+     * Offset between font and shadow.
      *
      * @zh
      * 字体与阴影的偏移。
      *
-     * @example
-     * ```ts
-     * import { Vec2 } from 'cc';
-     * labelShadow.offset = new Vec2(2, 2);
-     * ```
+     * @deprecated since v3.8.2, please use [[Label.shadowOffset]] instead.
      */
     @tooltip('i18n:labelShadow.offset')
-    get offset () {
-        return this._offset;
+    get offset (): Vec2 {
+        const label = this.node.getComponent(Label);
+        assertIsTrue(label);
+        return label.shadowOffset;
     }
 
     set offset (value) {
-        this._offset = value;
-        this._updateRenderData();
+        const label = this.node.getComponent(Label);
+        assertIsTrue(label);
+        label.shadowOffset = value;
     }
 
     /**
      * @en
-     * A non-negative float specifying the level of shadow blur
+     * A non-negative float specifying the level of shadow blur.
      *
      * @zh
-     * 阴影的模糊程度
+     * 阴影的模糊程度。
      *
-     * @example
-     * ```ts
-     * labelShadow.blur = 2;
-     * ```
+     * @deprecated since v3.8.2, please use [[Label.shadowBlur]] instead.
      */
     @tooltip('i18n:labelShadow.blur')
-    get blur () {
-        return this._blur;
+    get blur (): number {
+        const label = this.node.getComponent(Label);
+        assertIsTrue(label);
+        return label.shadowBlur;
     }
 
     set blur (value) {
-        this._blur = value;
-        this._updateRenderData();
-    }
-
-    public onEnable () {
-        this._updateRenderData();
-    }
-
-    public onDisable () {
-        this._updateRenderData();
-    }
-
-    protected _updateRenderData () {
         const label = this.node.getComponent(Label);
-        if (label) {
-            label.updateRenderData(true);
-        }
+        assertIsTrue(label);
+        label.shadowBlur = value;
+    }
+
+    /**
+     * @deprecated since v3.8.2, please use [[Label.enableShadow]] instead.
+     */
+    public onEnable (): void {
+        const label = this.node.getComponent(Label);
+        assertIsTrue(label);
+        label.enableShadow = true;
+    }
+
+    /**
+     * @deprecated since v3.8.2, please use [[Label.enableShadow]] instead.
+     */
+    public onDisable (): void {
+        const label = this.node.getComponent(Label);
+        assertIsTrue(label);
+        label.enableShadow = false;
     }
 }

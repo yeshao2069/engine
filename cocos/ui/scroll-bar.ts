@@ -1,19 +1,18 @@
 /*
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -24,20 +23,15 @@
  THE SOFTWARE.
 */
 
-/**
- * @packageDocumentation
- * @module ui
- */
-
 import { ccclass, help, executionOrder, menu, requireComponent, tooltip, displayOrder, type, serializable } from 'cc.decorator';
-import { Component } from '../core/components/component';
+import { Component } from '../scene-graph/component';
 import { UITransform } from '../2d/framework';
 import { Color, Size, Vec2, Vec3 } from '../core/math';
 import { ccenum } from '../core/value-types/enum';
 import { clamp01 } from '../core/math/utils';
 import { ScrollView } from './scroll-view';
 import { Sprite } from '../2d/components/sprite';
-import { Node } from '../core';
+import { Node } from '../scene-graph';
 import { legacyCC } from '../core/global-exports';
 
 const GETTING_SHORTER_FACTOR = 20;
@@ -55,7 +49,7 @@ const _tempVec2 = new Vec2();
  * @zh
  * 滚动条方向。
  */
-enum Direction {
+enum ScrollBarDirection {
     /**
      * @en
      * Horizontal scroll.
@@ -75,7 +69,7 @@ enum Direction {
     VERTICAL = 1,
 }
 
-ccenum(Direction);
+ccenum(ScrollBarDirection);
 
 /**
  * @en
@@ -90,6 +84,10 @@ ccenum(Direction);
 @menu('UI/ScrollBar')
 @requireComponent(UITransform)
 export class ScrollBar extends Component {
+    constructor () {
+        super();
+    }
+
     /**
      * @en
      * The "handle" part of the ScrollBar.
@@ -100,7 +98,7 @@ export class ScrollBar extends Component {
     @type(Sprite)
     @displayOrder(0)
     @tooltip('i18n:scrollbar.handle')
-    get handle () {
+    get handle (): Sprite | null {
         return this._handle;
     }
 
@@ -119,10 +117,10 @@ export class ScrollBar extends Component {
      * @zh
      * ScrollBar 的滚动方向。
      */
-    @type(Direction)
+    @type(ScrollBarDirection)
     @displayOrder(1)
     @tooltip('i18n:scrollbar.direction')
-    get direction () {
+    get direction (): ScrollBarDirection {
         return this._direction;
     }
 
@@ -144,7 +142,7 @@ export class ScrollBar extends Component {
      */
     @displayOrder(2)
     @tooltip('i18n:scrollbar.auto_hide')
-    get enableAutoHide () {
+    get enableAutoHide (): boolean {
         return this._enableAutoHide;
     }
 
@@ -170,7 +168,7 @@ export class ScrollBar extends Component {
      */
     @displayOrder(3)
     @tooltip('i18n:scrollbar.auto_hide_time')
-    get autoHideTime () {
+    get autoHideTime (): number {
         return this._autoHideTime;
     }
 
@@ -182,13 +180,13 @@ export class ScrollBar extends Component {
         this._autoHideTime = value;
     }
 
-    public static Direction = Direction;
+    public static Direction = ScrollBarDirection;
     @serializable
     protected _scrollView: ScrollView | null = null;
     @serializable
     protected _handle: Sprite | null = null;
     @serializable
-    protected _direction = Direction.HORIZONTAL;
+    protected _direction = ScrollBarDirection.HORIZONTAL;
     @serializable
     protected _enableAutoHide = false;
     @serializable
@@ -205,7 +203,7 @@ export class ScrollBar extends Component {
      * @zh
      * 滚动条隐藏。
      */
-    public hide () {
+    public hide (): void {
         this._autoHideRemainingTime = 0;
         this._setOpacity(0);
     }
@@ -217,8 +215,10 @@ export class ScrollBar extends Component {
      * @zh
      * 滚动条显示。
      */
-    public show () {
+    public show (): void {
         this._autoHideRemainingTime = this._autoHideTime;
+        // because scrollbar's onEnable is later than scrollView, its _opacity is be modified in onEnable. we should reset it.
+        this._opacity = 255;
         this._setOpacity(this._opacity);
     }
 
@@ -229,9 +229,9 @@ export class ScrollBar extends Component {
      * @zh
      * 重置滚动条位置。
      *
-     * @param outOfBoundary - 滚动位移。
+     * @param outOfBoundary @en Rolling displacement. @zh 滚动位移。
      */
-    public onScroll (outOfBoundary: Vec2) {
+    public onScroll (outOfBoundary: Vec2 | Readonly<Vec2>): void {
         if (!this._scrollView) {
             return;
         }
@@ -241,9 +241,9 @@ export class ScrollBar extends Component {
             return;
         }
 
-        const contentSize = content._uiProps.uiTransformComp!.contentSize;
-        const scrollViewSize = this._scrollView.node._uiProps.uiTransformComp!.contentSize;
-        const barSize = this.node._uiProps.uiTransformComp!.contentSize;
+        const contentSize = content._getUITransformComp()!.contentSize;
+        const scrollViewSize = this._scrollView.node._getUITransformComp()!.contentSize;
+        const barSize = this.node._getUITransformComp()!.contentSize;
 
         if (this._conditionalDisableScrollBar(contentSize, scrollViewSize)) {
             return;
@@ -262,7 +262,7 @@ export class ScrollBar extends Component {
         const outOfContentPosition = _tempVec2;
         outOfContentPosition.set(0, 0);
 
-        if (this._direction === Direction.HORIZONTAL) {
+        if (this._direction === ScrollBarDirection.HORIZONTAL) {
             contentMeasure = contentSize.width;
             scrollViewMeasure = scrollViewSize.width;
             handleNodeMeasure = barSize.width;
@@ -270,7 +270,7 @@ export class ScrollBar extends Component {
 
             this._convertToScrollViewSpace(outOfContentPosition, content);
             contentPosition = -outOfContentPosition.x;
-        } else if (this._direction === Direction.VERTICAL) {
+        } else if (this._direction === ScrollBarDirection.VERTICAL) {
             contentMeasure = contentSize.height;
             scrollViewMeasure = scrollViewSize.height;
             handleNodeMeasure = barSize.height;
@@ -289,23 +289,26 @@ export class ScrollBar extends Component {
     }
 
     /**
+     * @en
+     * Sets the scroll view.
+     *
      * @zh
      * 滚动视窗设置。
      *
-     * @param scrollView - 滚动视窗。
+     * @param scrollView @en The scroll view which is attached with this scroll bar. @zh 当前滚动条附着的滚动视窗。
      */
-    public setScrollView (scrollView: ScrollView) {
+    public setScrollView (scrollView: ScrollView): void {
         this._scrollView = scrollView;
     }
 
-    public onTouchBegan () {
+    public onTouchBegan (): void {
         if (!this._enableAutoHide) {
             return;
         }
         this._touching = true;
     }
 
-    public onTouchEnded () {
+    public onTouchEnded (): void {
         if (!this._enableAutoHide) {
             return;
         }
@@ -319,8 +322,8 @@ export class ScrollBar extends Component {
         if (this._scrollView) {
             const content = this._scrollView.content;
             if (content) {
-                const contentSize = content._uiProps.uiTransformComp!.contentSize;
-                const scrollViewSize = this._scrollView.node._uiProps.uiTransformComp!.contentSize;
+                const contentSize = content._getUITransformComp()!.contentSize;
+                const scrollViewSize = this._scrollView.node._getUITransformComp()!.contentSize;
                 if (this._conditionalDisableScrollBar(contentSize, scrollViewSize)) {
                     return;
                 }
@@ -330,26 +333,26 @@ export class ScrollBar extends Component {
         this._autoHideRemainingTime = this._autoHideTime;
     }
 
-    protected onEnable () {
+    protected onEnable (): void {
         const renderComp = this.node.getComponent(Sprite);
         if (renderComp) {
             this._opacity = renderComp.color.a;
         }
     }
 
-    protected start () {
+    protected start (): void {
         if (this._enableAutoHide) {
             this._setOpacity(0);
         }
     }
 
-    protected update (dt) {
+    protected update (dt: number): void {
         this._processAutoHide(dt);
     }
 
-    protected _convertToScrollViewSpace (out: Vec2, content: Node) {
-        const scrollTrans = this._scrollView && this._scrollView.node._uiProps.uiTransformComp;
-        const contentTrans = content._uiProps.uiTransformComp;
+    protected _convertToScrollViewSpace (out: Vec2, content: Node): void {
+        const scrollTrans = this._scrollView && this._scrollView.node._getUITransformComp();
+        const contentTrans = content._getUITransformComp();
         if (!scrollTrans || !contentTrans) {
             out.set(Vec2.ZERO);
         } else {
@@ -363,7 +366,7 @@ export class ScrollBar extends Component {
         }
     }
 
-    protected _setOpacity (opacity: number) {
+    protected _setOpacity (opacity: number): void {
         if (this._handle) {
             let renderComp = this.node.getComponent(Sprite);
             if (renderComp) {
@@ -381,7 +384,7 @@ export class ScrollBar extends Component {
         }
     }
 
-    protected _updateHandlerPosition (position: Vec2) {
+    protected _updateHandlerPosition (position: Vec2): void {
         if (this._handle) {
             const oldPosition = _tempVec3;
             this._fixupHandlerPosition(oldPosition);
@@ -390,41 +393,41 @@ export class ScrollBar extends Component {
         }
     }
 
-    protected _fixupHandlerPosition (out: Vec3) {
-        const uiTrans = this.node._uiProps.uiTransformComp!;
+    protected _fixupHandlerPosition (out: Vec3): void {
+        const uiTrans = this.node._getUITransformComp()!;
         const barSize = uiTrans.contentSize;
         const barAnchor = uiTrans.anchorPoint;
-        const handleSize = this.handle!.node._uiProps.uiTransformComp!.contentSize;
+        const handleSize = this.handle!.node._getUITransformComp()!.contentSize;
 
         const handleParent = this.handle!.node.parent!;
 
         Vec3.set(_tempPos_1, -barSize.width * barAnchor.x, -barSize.height * barAnchor.y, 0);
-        const leftBottomWorldPosition = this.node._uiProps.uiTransformComp!.convertToWorldSpaceAR(_tempPos_1, _tempPos_2);
+        const leftBottomWorldPosition = this.node._getUITransformComp()!.convertToWorldSpaceAR(_tempPos_1, _tempPos_2);
         const fixupPosition = out;
         fixupPosition.set(0, 0, 0);
-        handleParent._uiProps.uiTransformComp!.convertToNodeSpaceAR(leftBottomWorldPosition, fixupPosition);
+        handleParent._getUITransformComp()!.convertToNodeSpaceAR(leftBottomWorldPosition, fixupPosition);
 
-        if (this.direction === Direction.HORIZONTAL) {
+        if (this.direction === ScrollBarDirection.HORIZONTAL) {
             fixupPosition.set(fixupPosition.x, fixupPosition.y + (barSize.height - handleSize.height) / 2, fixupPosition.z);
-        } else if (this.direction === Direction.VERTICAL) {
+        } else if (this.direction === ScrollBarDirection.VERTICAL) {
             fixupPosition.set(fixupPosition.x + (barSize.width - handleSize.width) / 2, fixupPosition.y, fixupPosition.z);
         }
 
         this.handle!.node.setPosition(fixupPosition);
     }
 
-    protected _conditionalDisableScrollBar (contentSize: Size, scrollViewSize: Size) {
-        if (contentSize.width <= scrollViewSize.width && this._direction === Direction.HORIZONTAL) {
+    protected _conditionalDisableScrollBar (contentSize: Size, scrollViewSize: Size): boolean {
+        if (contentSize.width <= scrollViewSize.width && this._direction === ScrollBarDirection.HORIZONTAL) {
             return true;
         }
 
-        if (contentSize.height <= scrollViewSize.height && this._direction === Direction.VERTICAL) {
+        if (contentSize.height <= scrollViewSize.height && this._direction === ScrollBarDirection.VERTICAL) {
             return true;
         }
         return false;
     }
 
-    protected _calculateLength (contentMeasure: number, scrollViewMeasure: number, handleNodeMeasure: number, outOfBoundary: number) {
+    protected _calculateLength (contentMeasure: number, scrollViewMeasure: number, handleNodeMeasure: number, outOfBoundary: number): number {
         let denominatorValue = contentMeasure;
         if (outOfBoundary) {
             denominatorValue += (outOfBoundary > 0 ? outOfBoundary : -outOfBoundary) * GETTING_SHORTER_FACTOR;
@@ -442,7 +445,7 @@ export class ScrollBar extends Component {
         contentPosition: number,
         outOfBoundary: number,
         actualLenth: number,
-    ) {
+    ): void {
         let denominatorValue = contentMeasure - scrollViewMeasure;
         if (outOfBoundary) {
             denominatorValue += Math.abs(outOfBoundary);
@@ -455,24 +458,24 @@ export class ScrollBar extends Component {
         }
 
         const position = (handleNodeMeasure - actualLenth) * positionRatio;
-        if (this._direction === Direction.VERTICAL) {
+        if (this._direction === ScrollBarDirection.VERTICAL) {
             out.set(0, position);
         } else {
             out.set(position, 0);
         }
     }
 
-    protected _updateLength (length: number) {
+    protected _updateLength (length: number): void {
         if (this._handle) {
             const handleNode = this._handle.node;
-            const handleTrans = handleNode._uiProps.uiTransformComp!;
+            const handleTrans = handleNode._getUITransformComp()!;
             const handleNodeSize = handleTrans.contentSize;
             const anchor = handleTrans.anchorPoint;
             if (anchor.x !== defaultAnchor.x || anchor.y !== defaultAnchor.y) {
                 handleTrans.setAnchorPoint(defaultAnchor);
             }
 
-            if (this._direction === Direction.HORIZONTAL) {
+            if (this._direction === ScrollBarDirection.HORIZONTAL) {
                 handleTrans.setContentSize(length, handleNodeSize.height);
             } else {
                 handleTrans.setContentSize(handleNodeSize.width, length);
@@ -480,7 +483,7 @@ export class ScrollBar extends Component {
         }
     }
 
-    protected _processAutoHide (deltaTime: number) {
+    protected _processAutoHide (deltaTime: number): void {
         if (!this._enableAutoHide || this._autoHideRemainingTime <= 0) {
             return;
         } else if (this._touching) {
@@ -495,3 +498,5 @@ export class ScrollBar extends Component {
         }
     }
 }
+
+legacyCC.ScrollBar = ScrollBar;

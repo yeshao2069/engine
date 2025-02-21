@@ -1,14 +1,14 @@
 /*
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos2d-x.org
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
- in the Software without restriction, including without limitation the rights
- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- copies of the Software, and to permit persons to whom the Software is
- furnished to do so, subject to the following conditions:
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
  The above copyright notice and this permission notice shall be included in
  all copies or substantial portions of the Software.
@@ -22,29 +22,22 @@
  THE SOFTWARE.
 */
 
-/**
- * @packageDocumentation
- * @module model
- */
-
 import { EDITOR } from 'internal:constants';
 import {
     ccclass, help, executeInEditMode, executionOrder, menu, tooltip, type, visible, override, serializable, editable,
 } from 'cc.decorator';
-import { getWorldTransformUntilRoot } from '../../core/animation/transform-utils';
-import { Filter, PixelFormat } from '../../core/assets/asset-enum';
-import { Material } from '../../core/assets/material';
+import { getWorldTransformUntilRoot } from '../../animation/transform-utils';
+import { TextureFilter, PixelFormat } from '../../asset/assets/asset-enum';
+import { Material } from '../../asset/assets/material';
 import { Mesh } from '../assets/mesh';
 import { Skeleton } from '../assets/skeleton';
-import { Texture2D } from '../../core/assets/texture-2d';
-import { CCString } from '../../core/data/utils/attribute';
-import { AttributeName, FormatInfos, Format, Type, Attribute, BufferTextureCopy } from '../../core/gfx';
-import { Mat4, Vec2, Vec3 } from '../../core/math';
+import { Texture2D } from '../../asset/assets/texture-2d';
+import { CCString, Mat4, Vec2, Vec3, cclegacy, warn } from '../../core';
+import { AttributeName, FormatInfos, Format, Type, Attribute, BufferTextureCopy } from '../../gfx';
 import { mapBuffer, readBuffer, writeBuffer } from '../misc/buffer';
 import { SkinnedMeshRenderer } from './skinned-mesh-renderer';
-import { legacyCC } from '../../core/global-exports';
 
-const repeat = (n: number) => n - Math.floor(n);
+const repeat = (n: number): number => n - Math.floor(n);
 const batch_id: Attribute = new Attribute(AttributeName.ATTR_BATCH_ID, Format.R32F);
 const batch_uv: Attribute = new Attribute(AttributeName.ATTR_BATCH_UV, Format.RG32F);
 const batch_extras_size = FormatInfos[batch_id.format].size + FormatInfos[batch_uv.format].size;
@@ -72,6 +65,11 @@ export class SkinnedMeshUnit {
     @type(Material)
     public material: Material | null = null;
 
+    /**
+     * @en Local transform matrix
+     * @zh 本地变换矩阵
+     * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
+     */
     @serializable
     public _localTransform = new Mat4();
 
@@ -90,7 +88,7 @@ export class SkinnedMeshUnit {
         Vec2.copy(this._offset, offset);
     }
 
-    get offset () {
+    get offset (): Vec2 {
         return this._offset;
     }
 
@@ -103,7 +101,7 @@ export class SkinnedMeshUnit {
         Vec2.copy(this._size, size);
     }
 
-    get size () {
+    get size (): Vec2 {
         return this._size;
     }
 
@@ -116,11 +114,11 @@ export class SkinnedMeshUnit {
         if (!comp) { return; }
         this.mesh = comp.mesh;
         this.skeleton = comp.skeleton;
-        this.material = comp.getMaterial(0);
+        this.material = comp.getSharedMaterial(0);
         if (comp.skinningRoot) { getWorldTransformUntilRoot(comp.node, comp.skinningRoot, this._localTransform); }
     }
 
-    get copyFrom () {
+    get copyFrom (): SkinnedMeshRenderer | null {
         return null;
     }
 }
@@ -172,9 +170,13 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
 
     private _batchMaterial: Material | null = null;
 
+    constructor () {
+        super();
+    }
+
     @override
     @visible(false)
-    get mesh () {
+    get mesh (): Mesh | null {
         return super.mesh;
     }
 
@@ -184,7 +186,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
 
     @override
     @visible(false)
-    get skeleton () {
+    get skeleton (): Skeleton | null {
         return super.skeleton;
     }
 
@@ -192,12 +194,12 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
         super.skeleton = val;
     }
 
-    public onLoad () {
+    public onLoad (): void {
         super.onLoad();
         this.cook();
     }
 
-    public onDestroy () {
+    public onDestroy (): void {
         for (const tex in this._textures) {
             this._textures[tex].destroy();
         }
@@ -209,24 +211,27 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
         super.onDestroy();
     }
 
-    public _onMaterialModified (idx: number, material: Material | null) {
+    /**
+     * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
+     */
+    public _onMaterialModified (idx: number, material: Material | null): void {
         this.cookMaterials();
         super._onMaterialModified(idx, this.getMaterialInstance(idx));
     }
 
-    public cook () {
+    public cook (): void {
         this.cookMaterials();
         this.cookSkeletons();
         this.cookMeshes();
     }
 
-    public cookMaterials () {
+    public cookMaterials (): void {
         if (!this._batchMaterial) {
-            this._batchMaterial = this.getMaterial(0);
+            this._batchMaterial = this.getSharedMaterial(0);
         }
         const mat = this.getMaterialInstance(0);
         if (!mat || !this._batchMaterial || !this._batchMaterial.effectAsset) {
-            console.warn('incomplete batch material!'); return;
+            warn('incomplete batch material!'); return;
         }
         mat.copy(this._batchMaterial); this.resizeAtlases();
         const tech = mat.effectAsset!.techniques[mat.technique];
@@ -234,7 +239,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
             const pass = tech.passes[i];
             if (!pass.properties) { continue; }
             for (const prop in pass.properties) {
-                if (pass.properties[prop].type >= Type.SAMPLER1D) { // samplers
+                if (pass.properties[prop].type >= (Type.SAMPLER1D as number)) { // samplers
                     let tex: Texture2D | null = null;
                     if (this.batchableTextureNames.find((n) => n === prop)) {
                         tex = this._textures[prop];
@@ -257,8 +262,8 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
         }
     }
 
-    public cookSkeletons () {
-        if (!this._skinningRoot) { console.warn('no skinning root specified!'); return; }
+    public cookSkeletons (): void {
+        if (!this._skinningRoot) { warn('no skinning root specified!'); return; }
         // merge joints accordingly
         const joints: string[] = [];
         const bindposes: Mat4[] = [];
@@ -274,7 +279,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
                     if (EDITOR) { // consistency check
                         Mat4.multiply(m4_1, partial.bindposes[i], m4_local);
                         if (!m4_1.equals(bindposes[idx])) {
-                            console.warn(`${this.node.name}: Inconsistent bindpose at ${joints[idx]} in unit ${u}, artifacts may present`);
+                            warn(`${this.node.name}: Inconsistent bindpose at ${joints[idx]} in unit ${u}, artifacts may present`);
                         }
                     }
                     continue;
@@ -298,7 +303,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
         this.skeleton = skeleton;
     }
 
-    public cookMeshes () {
+    public cookMeshes (): void {
         let isValid = false;
         for (let u = 0; u < this.units.length; u++) {
             const unit = this.units[u];
@@ -343,7 +348,10 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
             if (!unit || !unit.mesh || !unit.mesh.data) { continue; }
             const newMesh = this._createUnitMesh(i, unit.mesh);
             const dataView = new DataView(newMesh.data.buffer);
-            Mat4.inverseTranspose(m4_local, unit._localTransform);
+
+            Mat4.invert(m4_local, unit._localTransform);
+            Mat4.transpose(m4_local, m4_local);
+
             const { offset } = unit;
             const { size } = unit;
             for (let b = 0; b < newMesh.struct.vertexBundles.length; b++) {
@@ -353,7 +361,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
                 posFormat = Format.UNKNOWN;
                 for (let a = 0; a < bundle.attributes.length; a++) {
                     const attr = bundle.attributes[a];
-                    if (attr.name === AttributeName.ATTR_POSITION) {
+                    if (attr.name === AttributeName.ATTR_POSITION as string) {
                         posFormat = attr.format;
                         break;
                     }
@@ -372,7 +380,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
                 normalFormat = Format.UNKNOWN;
                 for (let a = 0; a < bundle.attributes.length; a++) {
                     const attr = bundle.attributes[a];
-                    if (attr.name === AttributeName.ATTR_NORMAL) {
+                    if (attr.name === AttributeName.ATTR_NORMAL as string) {
                         normalFormat = attr.format;
                         break;
                     }
@@ -391,7 +399,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
                 tangentFormat = Format.UNKNOWN;
                 for (let a = 0; a < bundle.attributes.length; a++) {
                     const attr = bundle.attributes[a];
-                    if (attr.name === AttributeName.ATTR_TANGENT) {
+                    if (attr.name === (AttributeName.ATTR_TANGENT) as string) {
                         tangentFormat = attr.format;
                         break;
                     }
@@ -411,7 +419,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
                 uvFormat = Format.UNKNOWN;
                 for (let a = 0; a < bundle.attributes.length; a++) {
                     const attr = bundle.attributes[a];
-                    if (attr.name === AttributeName.ATTR_BATCH_UV) {
+                    if (attr.name === AttributeName.ATTR_BATCH_UV as string) {
                         uvFormat = attr.format;
                         break;
                     }
@@ -431,7 +439,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
                 jointFormat = Format.UNKNOWN;
                 for (let a = 0; a < bundle.attributes.length; a++) {
                     const attr = bundle.attributes[a];
-                    if (attr.name === AttributeName.ATTR_JOINTS) {
+                    if (attr.name === AttributeName.ATTR_JOINTS as string) {
                         jointFormat = attr.format;
                         break;
                     }
@@ -448,7 +456,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
         this._updateModels();
     }
 
-    protected cookTextures (target: Texture2D, prop: string, passIdx: number) {
+    protected cookTextures (target: Texture2D, prop: string, passIdx: number): void {
         const texImages: TexImageSource[] = [];
         const texImageRegions: BufferTextureCopy[] = [];
         const texBuffers: ArrayBufferView[] = [];
@@ -474,26 +482,25 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
             }
         }
         const gfxTex = target.getGFXTexture()!;
-        const { device } = legacyCC.director.root!;
+        const { device } = cclegacy.director.root!;
         if (texBuffers.length > 0) { device.copyBuffersToTexture(texBuffers, gfxTex, texBufferRegions); }
         if (texImages.length > 0) { device.copyTexImagesToTexture(texImages, gfxTex, texImageRegions); }
     }
 
-    protected createTexture (prop: string) {
+    protected createTexture (prop: string): Texture2D {
         const tex = new Texture2D();
-        tex.setFilters(Filter.LINEAR, Filter.LINEAR);
-        tex.setMipFilter(Filter.NEAREST);
+        tex.setFilters(TextureFilter.LINEAR, TextureFilter.LINEAR);
+        tex.setMipFilter(TextureFilter.NEAREST);
         tex.reset({
             width: this.atlasSize,
             height: this.atlasSize,
             format: PixelFormat.RGBA8888,
         });
-        tex.loaded = true;
         this._textures[prop] = tex;
         return tex;
     }
 
-    protected resizeAtlases () {
+    protected resizeAtlases (): void {
         for (const prop in this._textures) {
             const tex = this._textures[prop];
             tex.reset({
@@ -504,7 +511,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
         }
     }
 
-    private _createUnitMesh (unitIdx: number, mesh: Mesh) {
+    private _createUnitMesh (unitIdx: number, mesh: Mesh): Mesh {
         // add batch ID to this temp mesh
         // first, update bookkeeping
         const newMeshStruct: Mesh.IStruct = JSON.parse(JSON.stringify(mesh.struct));
@@ -520,7 +527,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
                 uvFormat = Format.UNKNOWN;
                 for (let a = 0; a < bundle.attributes.length; a++) {
                     const attr = bundle.attributes[a];
-                    if (attr.name === AttributeName.ATTR_TEX_COORD) {
+                    if (attr.name === AttributeName.ATTR_TEX_COORD as string) {
                         uvFormat = attr.format;
                         break;
                     }
@@ -553,7 +560,7 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
         const oldMeshData = mesh.data;
         const newDataView = new DataView(newMeshData.buffer);
         const oldDataView = new DataView(oldMeshData.buffer);
-        const { isLittleEndian } = legacyCC.sys;
+        const { isLittleEndian } = cclegacy.sys;
         for (const b in modifiedBundles) {
             const newBundle = newMeshStruct.vertexBundles[b];
             const oldBundle = mesh.struct.vertexBundles[b];
@@ -571,8 +578,8 @@ export class SkinnedMeshBatchRenderer extends SkinnedMeshRenderer {
                 // insert batch ID
                 newDataView.setFloat32(newOffset + oldStride, unitIdx);
                 // insert batch UV
-                newDataView.setFloat32(newOffset + oldStride + 4, uvs[j * 2], isLittleEndian);
-                newDataView.setFloat32(newOffset + oldStride + 8, uvs[j * 2 + 1], isLittleEndian);
+                newDataView.setFloat32(newOffset + oldStride + 4, uvs[j * 2], isLittleEndian as boolean);
+                newDataView.setFloat32(newOffset + oldStride + 8, uvs[j * 2 + 1], isLittleEndian as boolean);
                 newOffset += newStride;
                 oldOffset += oldStride;
             }

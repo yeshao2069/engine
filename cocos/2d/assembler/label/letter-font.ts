@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2018-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2018-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,15 +22,10 @@
  THE SOFTWARE.
 */
 
-/**
- * @packageDocumentation
- * @hidden
- */
-import { assetManager } from '../../../core/asset-manager';
-import { mixin } from '../../../core/utils/js';
-import { Label, LabelOutline } from '../../components';
-import { bmfontUtils } from './bmfontUtils';
-import { shareLabelInfo, LetterAtlas, computeHash } from './font-utils';
+import type { Label } from '../../components';
+import { IAssembler } from '../../renderer/base';
+import { BmfontUtils } from './bmfontUtils';
+import { shareLabelInfo, LetterAtlas, computeHash, LetterRenderTexture } from './font-utils';
 
 const _atlasWidth = 1024;
 const _atlasHeight = 1024;
@@ -39,60 +33,52 @@ const _isBold = false;
 
 let _shareAtlas: LetterAtlas | null  = null;
 
-export const letterFont = mixin(bmfontUtils, {
-    getAssemblerData () {
+export class LetterFont extends BmfontUtils {
+    getAssemblerData (): LetterRenderTexture | null {
         if (!_shareAtlas) {
             _shareAtlas = new LetterAtlas(_atlasWidth, _atlasHeight);
         }
 
-        return _shareAtlas.getTexture();
-    },
+        return _shareAtlas.getTexture() as LetterRenderTexture | null;
+    }
 
-    _updateFontFamily (comp) {
+    protected _updateFontFamily (comp: Label): void {
         shareLabelInfo.fontAtlas = _shareAtlas;
         shareLabelInfo.fontFamily = this._getFontFamily(comp);
 
         // outline
-        const outline = comp.getComponent(LabelOutline);
-        if (outline && outline.enabled) {
+        const isOutlined = comp.enableOutline && comp.outlineWidth > 0;
+        if (isOutlined) {
             shareLabelInfo.isOutlined = true;
-            shareLabelInfo.margin = outline.width;
-            shareLabelInfo.out = outline.color.clone();
-            shareLabelInfo.out.a = outline.color.a * comp.color.a / 255.0;
+            shareLabelInfo.margin = comp.outlineWidth;
+            shareLabelInfo.out = comp.outlineColor.clone();
+            shareLabelInfo.out.a = comp.outlineColor.a * comp.color.a / 255.0;
         } else {
             shareLabelInfo.isOutlined = false;
             shareLabelInfo.margin = 0;
         }
-    },
+    }
 
-    _getFontFamily (comp: Label) {
+    protected _getFontFamily (comp: Label): string {
         let fontFamily = 'Arial';
         if (!comp.useSystemFont) {
             if (comp.font) {
-                if (comp.font._nativeAsset) {
-                    fontFamily = comp.font._nativeAsset;
-                } else {
-                    assetManager.postLoadNative(comp.font, (err) => {
-                        if (!comp.isValid) { return; }
-                        fontFamily = comp.font!._nativeAsset || 'Arial';
-                        comp.updateRenderData(true);
-                    });
-                }
+                fontFamily = comp.font._nativeAsset || 'Arial';
             }
         } else {
             fontFamily = comp.fontFamily || 'Arial';
         }
 
         return fontFamily;
-    },
+    }
 
-    _updateLabelInfo (comp) {
+    protected _updateLabelInfo (comp: Label): void {
         shareLabelInfo.fontDesc = this._getFontDesc();
-        shareLabelInfo.color = comp.color;
+        shareLabelInfo.color.set(comp.color);
         shareLabelInfo.hash = computeHash(shareLabelInfo);
-    },
+    }
 
-    _getFontDesc () {
+    protected _getFontDesc (): string {
         let fontDesc = `${shareLabelInfo.fontSize.toString()}px `;
         fontDesc += shareLabelInfo.fontFamily;
         if (_isBold) {
@@ -100,9 +86,5 @@ export const letterFont = mixin(bmfontUtils, {
         }
 
         return fontDesc;
-    },
-    _computeHorizontalKerningForText () {},
-    _determineRect (tempRect) {
-        return false;
-    },
-});
+    }
+}

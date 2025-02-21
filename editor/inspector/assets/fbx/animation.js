@@ -1,5 +1,16 @@
-exports.template = `
+'use strict';
+
+const { updateElementReadonly, updateElementInvalid, setPropValue, getPropValue } = require('../../utils/assets');
+
+
+exports.template = /* html */`
 <div class="container">
+    <div class="animator-config">
+        <ui-prop class="animator-config-import-all-animator">
+            <ui-label slot="label" value="i18n:ENGINE.assets.fbx.GlTFUserData.mountAllAnimationsOnPrefab.name"></ui-label>
+            <ui-checkbox slot="content"></ui-checkbox>
+        </ui-prop>
+    </div>
     <div class="show-type-wrap">
         <ui-tab class="show-type" value="0">
             <ui-button value="time">Time</ui-button>
@@ -63,25 +74,58 @@ exports.template = `
                 <option value="38">LoopReverse</option>
             </ui-select>
         </ui-prop>
+        <ui-prop>
+            <span slot="label">Speed</span>
+            <ui-num-input slot="content" class="speed"></ui-num-input>
+        </ui-prop>
+        <ui-section expand cache-expand="inspector-asset-fbx-animation-additive">
+            <ui-label slot="header" value="i18n:ENGINE.assets.fbx.animationSetting.additive.header"></ui-label>
+            <ui-prop>
+                <ui-label slot="label" value="i18n:ENGINE.assets.fbx.animationSetting.additive.enabled.label"></ui-label>
+                <ui-checkbox slot="content" class="additive-enabled"
+                    tooltip="i18n:ENGINE.assets.fbx.animationSetting.additive.enabled.tooltip"></ui-checkbox>
+            </ui-prop>
+            <ui-prop ui="asset">
+                <ui-label slot="label" value="i18n:ENGINE.assets.fbx.animationSetting.additive.refClip.label"></ui-label>
+                <ui-asset slot="content" droppable="cc.AnimationClip" class="ref-clip"
+                    tooltip="i18n:ENGINE.assets.fbx.animationSetting.additive.refClip.tooltip"></ui-asset>
+            </ui-prop>
+        </ui-section>
     </div>
+    <ui-label class="multiple-warn-tip" value="i18n:ENGINE.assets.multipleWarning"></ui-label>
 </div>
 `;
 
-exports.style = `
-ui-prop,
-ui-section {
-    margin: 4px 0;
+exports.style = /* css */`
+.container {
+    padding: 4px;
+}
+
+.container[multiple-invalid] > *:not(.multiple-warn-tip) {
+    display: none!important;
+ }
+
+ .container[multiple-invalid] > .multiple-warn-tip {
+    display: block;
+ }
+
+.container .multiple-warn-tip {
+    display: none;
+    text-align: center;
+    color: var(--color-focus-contrast-weakest);
+    margin-top: 8px;
 }
 .container > .show-type-wrap {
     text-align: center;
+    margin-top: 8px;
 }
 .container > .clips {
-    padding: 5px;
+    padding: 4px;
     border-radius: calc(var(--size-normal-radius) * 1px);
     overflow-y: auto;
     max-height: 250px;
     background: var(--color-normal-fill-emphasis);
-    margin-bottom: 20px;
+    margin-bottom: 8px;
 }
 .container > .clips > .clip {}
 .container > .clips > .clip > .table {
@@ -91,18 +135,18 @@ ui-section {
 }
 .container > .clips > .clip > .table > .header {
     display: flex;
-    line-height: 1.6em;
-    padding: 2px 5px;
-    margin-bottom: 5px;
-    border-bottom: 1px solid var(--color-normal-border-emphasis);
+    padding: 0 4px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--color-default-border);
+    color: var(--color-default-fill-weakest);
 }
 .container > .clips > .clip > .table > .line {
     display: flex;
-    line-height: 1.6em;
-    padding: 2px 5px;
+    padding: 0 4px;
+    cursor: pointer;
 }
 .container > .clips > .clip > .table > .line[active] {
-    background: var(--color-focus-fill);
+    background-color: var(--color-info-fill-important);
 }
 .container > .clips > .clip > .table > .line > .name,
 .container > .clips > .clip > .table > .header > .name {
@@ -116,18 +160,27 @@ ui-section {
 .container > .clips > .clip > .add-clip {
     display: flex;
     justify-content: flex-end;
-    margin-bottom: 10px;
 }
 .container > .clips > .clip > .add-clip > .button > ui-icon {
-    padding: 0 5px;
+    padding: 0 4px;
     border-radius: 2px;
     line-height: 16px;
-    margin-left: 13px;
-    margin-right: 5px;
+    margin-left: 10px;
+    margin-right: 2px;
     cursor: pointer;
 }
 .container > .clips > .clip > .add-clip > .button > ui-icon:hover {
     background: var(--color-normal-fill);
+}
+
+.container > .clips > .clip > .add-clip > .button > ui-icon[disabled] {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+.container > .editor[disabled] {
+    opacity: 0.55;
+    pointer-events: none;
 }
 
 .container > .editor > .anim-name {
@@ -276,6 +329,8 @@ ui-section {
 
 exports.$ = {
     container: '.container',
+    importAllAnimationsCheckbox: '.animator-config-import-all-animator ui-checkbox',
+    importAllAnimatorWrap: '.animator-config-import-all-animator',
     clips: '.clips',
     editor: '.editor',
     clipName: '.clip-name',
@@ -285,6 +340,9 @@ exports.$ = {
     clipTo: '.clip-to',
     clipFrames: '.clip-frames',
     wrapMode: '.wrap-mode',
+    speed: '.speed',
+    additiveEnabled: '.additive-enabled',
+    refClip: '.ref-clip',
     rulerMaking: '.ruler-making',
     rulerGear: '.ruler-gear',
     controlWrap: '.control-wrap',
@@ -303,14 +361,14 @@ exports.$ = {
 const Elements = {
     // infos put first
     infos: {
-        ready () {
+        ready() {
             const panel = this;
 
             Object.assign(panel, {
                 animationInfos: null,
             });
         },
-        update () {
+        update() {
             const panel = this;
 
             if (panel.meta && panel.meta.userData.animationImportSettings) {
@@ -329,7 +387,7 @@ const Elements = {
         },
     },
     showType: {
-        ready () {
+        ready() {
             const panel = this;
             panel.animationTimeShowType = panel.$.showType.value === 0 ? 'time' : 'frame';
             panel.$.showType.addEventListener('change', (event) => {
@@ -337,7 +395,7 @@ const Elements = {
                 Elements.clips.update.call(panel);
             });
         },
-        update () {
+        update() {
             const panel = this;
 
             if (!panel.animationInfos) {
@@ -351,16 +409,15 @@ const Elements = {
         },
     },
     clips: {
-        ready () {
+        ready() {
             const panel = this;
-
             Object.assign(panel, {
                 splitClipIndex: 0,
                 rawClipIndex: 0,
                 currentClipInfo: null,
             });
         },
-        update () {
+        update() {
             const panel = this;
 
             panel.$.clips.innerText = '';
@@ -423,11 +480,11 @@ const Elements = {
                     line.appendChild(name);
                     const time = document.createElement('div');
                     time.setAttribute('class', 'time');
-                    time.innerHTML =                        panel.animationTimeShowType === 'time' ? subAnim.from.toFixed(2) : Math.round(subAnim.from * panel.rawClipInfo.fps);
+                    time.innerHTML = panel.animationTimeShowType === 'time' ? subAnim.from.toFixed(3) : Math.round(subAnim.from * (subAnim.fps || panel.rawClipInfo.fps));
                     line.appendChild(time);
                     const timeEnd = document.createElement('div');
                     timeEnd.setAttribute('class', 'time end');
-                    timeEnd.innerHTML =                        panel.animationTimeShowType === 'time' ? subAnim.to.toFixed(2) : Math.round(subAnim.to * panel.rawClipInfo.fps);
+                    timeEnd.innerHTML = panel.animationTimeShowType === 'time' ? subAnim.to.toFixed(3) : Math.round(subAnim.to * (subAnim.fps || panel.rawClipInfo.fps));
                     line.appendChild(timeEnd);
                 });
 
@@ -442,6 +499,7 @@ const Elements = {
                 const addIcon = document.createElement('ui-icon');
                 addIcon.setAttribute('value', 'add');
                 addIcon.setAttribute('tooltip', 'Duplicate Selected');
+                updateElementReadonly.call(panel, addIcon);
                 button.appendChild(addIcon);
                 addIcon.addEventListener('click', () => {
                     const newInfo = panel.newClipTemplate();
@@ -451,12 +509,14 @@ const Elements = {
                     Elements.clips.update.call(panel);
                     Elements.editor.update.call(panel);
                     panel.dispatch('change');
+                    panel.dispatch('snapshot');
                 });
 
                 const miniIcon = document.createElement('ui-icon');
                 miniIcon.setAttribute('value', 'mini');
                 miniIcon.setAttribute('tooltip', 'Remove Selected');
-                button.appendChild(miniIcon);
+                updateElementReadonly.call(panel, miniIcon);
+                button.prepend(miniIcon);
                 miniIcon.addEventListener('click', () => {
                     panel.updateCurrentClipInfo();
 
@@ -465,15 +525,20 @@ const Elements = {
                     }
                     panel.clipNames.delete(panel.currentClipInfo.name);
                     panel.animationInfos[panel.rawClipIndex].splits.splice(panel.splitClipIndex, 1);
+                    const length = panel.animationInfos[panel.rawClipIndex].splits.length;
+                    if (length > 0 && panel.splitClipIndex > 0 && panel.splitClipIndex >= length) {
+                        panel.splitClipIndex = length - 1;
+                    }
                     Elements.clips.update.call(panel);
                     Elements.editor.update.call(panel);
                     panel.dispatch('change');
+                    panel.dispatch('snapshot');
                 });
             });
         },
     },
     editor: {
-        ready () {
+        ready() {
             const panel = this;
 
             Object.assign(panel, {
@@ -481,7 +546,6 @@ const Elements = {
                 virtualControl: null,
                 clipNames: [],
             });
-
             panel.onClipNameBind = panel.onClipName.bind(panel);
             panel.$.clipName.addEventListener('confirm', panel.onClipNameBind);
 
@@ -500,7 +564,16 @@ const Elements = {
             panel.onWrapModeChangeBind = panel.onWrapModeChange.bind(panel);
             panel.$.wrapMode.addEventListener('confirm', panel.onWrapModeChangeBind);
 
-            function observer () {
+            panel.onSpeedChangeBind = panel.onSpeedChange.bind(panel);
+            panel.$.speed.addEventListener('confirm', panel.onSpeedChangeBind);
+
+            panel.onAdditiveEnabledChangedBind = panel.onAdditiveEnabledChanged.bind(panel);
+            panel.$.additiveEnabled.addEventListener('confirm', panel.onAdditiveEnabledChangedBind);
+
+            panel.onRefClipChangedBind = panel.onRefClipChanged.bind(panel);
+            panel.$.refClip.addEventListener('confirm', panel.onRefClipChangedBind);
+
+            function observer() {
                 const rect = panel.$.editor.getBoundingClientRect();
                 panel.gridTableWith = rect.width - 60;
 
@@ -516,7 +589,7 @@ const Elements = {
             panel.resizeObserver.observe(panel.$.editor);
             observer();
         },
-        close () {
+        close() {
             const panel = this;
             panel.resizeObserver.unobserve(panel.$.editor);
 
@@ -531,8 +604,11 @@ const Elements = {
             panel.$.clipFPS.removeEventListener('confirm', panel.onFpsChangeBind);
 
             panel.$.wrapMode.removeEventListener('confirm', panel.onWrapModeChangeBind);
+            panel.$.speed.removeEventListener('confirm', panel.onSpeedChangeBind);
+            panel.$.additiveEnabled.removeEventListener('confirm', panel.onAdditiveEnabledChangedBind);
+            panel.$.refClip.removeEventListener('confirm', panel.onRefClipChangedBind);
         },
-        update () {
+        update() {
             const panel = this;
 
             panel.updateRawClipInfo();
@@ -546,33 +622,36 @@ const Elements = {
                 panel.$.editor.style.display = 'block';
             }
 
+            updateElementReadonly.call(panel, panel.$.editor);
+
             panel.$.clipName.value = panel.currentClipInfo.name;
 
             // ruler making
             panel.$.rulerMaking.innerText = '';
             const maxNum = panel.gridConfig.mod + 1;
             for (let minNum = 1; minNum <= maxNum; minNum++) {
-                const label = document.createElement('div');
-                label.setAttribute('class', 'label-item');
-                label.style.left = `${panel.gridConfig.spacing * 5 * (minNum - 1) - 6}px`;
-                panel.$.rulerMaking.appendChild(label);
-
-                const span = document.createElement('span');
-                span.setAttribute('class', 'mid-label');
-                span.innerText = (panel.gridConfig.labelStep * (minNum - 1)).toFixed(2);
-                label.appendChild(span);
+                // If the remaining cells are less than 1.5, hide the label
+                if (((panel.gridConfig.width / panel.gridConfig.spacing) % 5) >= 1.5 || minNum !== maxNum) {
+                    const label = document.createElement('div');
+                    label.setAttribute('class', 'label-item');
+                    label.style.left = `${panel.gridConfig.spacing * 5 * (minNum - 1) - 6}px`;
+                    panel.$.rulerMaking.appendChild(label);
+                    const span = document.createElement('span');
+                    span.setAttribute('class', 'mid-label');
+                    span.innerText = (panel.gridConfig.labelStep * (minNum - 1)).toFixed(3);
+                    label.appendChild(span);
+                }
             }
             const lastMakingLabel = document.createElement('div');
             lastMakingLabel.setAttribute('class', 'label-item');
             lastMakingLabel.style.left = `${panel.gridConfig.width}px`;
             panel.$.rulerMaking.appendChild(lastMakingLabel);
-            lastMakingLabel.innerText = panel.rawClipInfo.duration.toFixed(2);
+            lastMakingLabel.innerText = panel.rawClipInfo.duration.toFixed(3);
 
             // ruler gear
             panel.$.rulerGear.innerText = '';
             Object.assign(panel.$.rulerGear.style, {
                 'margin-left': `${panel.gridConfig.spacing}px`,
-                'margin-right': `${0 - panel.gridConfig.spacing}px`,
             });
             const firstRulerGear = document.createElement('div');
             firstRulerGear.setAttribute('class', 'start');
@@ -602,48 +681,40 @@ const Elements = {
             Object.assign(panel.$.controlRight.style, panel.currentClipInfo.ctrlEndStyle);
         },
     },
+    mountAllAnimationsOnPrefab: {
+        ready() {
+            const panel = this;
+
+            panel.$.importAllAnimationsCheckbox.addEventListener('change', panel.setProp.bind(panel, 'mountAllAnimationsOnPrefab', 'boolean'));
+            panel.$.importAllAnimationsCheckbox.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
+            });
+        },
+        update() {
+            const panel = this;
+
+            if (!panel.animationInfos) {
+                panel.$.importAllAnimatorWrap.style.display = 'none';
+                return;
+            } else {
+                panel.$.importAllAnimatorWrap.style.display = 'block';
+            }
+
+            panel.$.importAllAnimationsCheckbox.value = getPropValue.call(panel, panel.meta.userData.mountAllAnimationsOnPrefab, true);
+
+            updateElementInvalid.call(panel, panel.$.importAllAnimationsCheckbox, 'mountAllAnimationsOnPrefab');
+            updateElementReadonly.call(panel, panel.$.importAllAnimationsCheckbox);
+        },
+    },
 };
 
-exports.update = function (assetList, metaList) {
-    this.assetList = assetList;
-    this.metaList = metaList;
-    this.asset = assetList[0];
-    this.meta = metaList[0];
-
-    for (const prop in Elements) {
-        const element = Elements[prop];
-        if (element.update) {
-            element.update.call(this);
-        }
-    }
-    this.initAnimationNameToUUIDMap();
-    this.initAnimationInfos();
-    if (this.animationInfos) {
-        this.onSelect(0, 0);
-    }
-};
-
-exports.ready = function () {
-    for (const prop in Elements) {
-        const element = Elements[prop];
-        if (element.ready) {
-            element.ready.call(this);
-        }
-    }
-};
-
-exports.close = function () {
-    for (const prop in Elements) {
-        const element = Elements[prop];
-        if (element.close) {
-            element.close.call(this);
-        }
-    }
-};
+async function callModelPreviewFunction(funcName, ...args) {
+    return await Editor.Message.request('scene', 'call-preview-function', 'scene:model-preview', funcName, ...args);
+}
 
 exports.methods = {
     /** animation name -> uuid */
-    initAnimationNameToUUIDMap () {
+    initAnimationNameToUUIDMap() {
         if (this.meta && this.meta.subMetas) {
             const animationNameToUUIDMap = new Map();
             Object.keys(this.meta.subMetas).forEach((id) => {
@@ -658,7 +729,7 @@ exports.methods = {
             this.animationNameToUUIDMap = animationNameToUUIDMap;
         }
     },
-    initAnimationInfos () {
+    initAnimationInfos() {
         if (this.meta && this.meta.userData.animationImportSettings) {
             this.animationInfos = this.meta.userData.animationImportSettings;
             // Collect clip names for renaming and creating to determine whether the name is repeated
@@ -674,7 +745,7 @@ exports.methods = {
         }
     },
 
-    onSelect (rawClipIndex, splitClipIndex) {
+    onSelect(rawClipIndex, splitClipIndex) {
         this.rawClipIndex = rawClipIndex;
         this.splitClipIndex = splitClipIndex;
         const isElementSelect = (element) => element.getAttribute('rawClipIndex') == rawClipIndex && element.getAttribute('splitClipIndex') == splitClipIndex;
@@ -690,15 +761,21 @@ exports.methods = {
         const curClipInfo = this.getCurClipInfo();
         Editor.Message.broadcast('fbx-inspector:animation-change', curClipInfo);
     },
-    getCurClipInfo () {
+    getCurClipInfo() {
+        if (!this.animationInfos) {
+            return null;
+        }
         const animInfo = this.animationInfos[this.rawClipIndex];
         const splitInfo = animInfo.splits[this.splitClipIndex];
 
         if (!animInfo) {
-            return;
+            return null;
         }
-
-        const clipUUID = this.animationNameToUUIDMap.get(animInfo.name);
+        if (!splitInfo) {
+            return null;
+        }
+        const rawClipUUID = this.animationNameToUUIDMap.get(animInfo.name);
+        const clipUUID = this.animationNameToUUIDMap.get(splitInfo.name);
         let duration = animInfo.duration;
         let fps = animInfo.fps;
         let from = 0;
@@ -717,14 +794,20 @@ exports.methods = {
         }
 
         return {
+            rawClipUUID,
+            rawClipIndex: this.rawClipIndex,
             clipUUID,
             duration,
             fps,
             from,
             to,
+            wrapMode: splitInfo.wrapMode,
+            speed: splitInfo.speed || 1,
+            additiveEnabled: splitInfo.additive?.enabled ?? false,
+            refClip: splitInfo.additive?.refClip || '',
         };
     },
-    getRightName (name) {
+    getRightName(name) {
         if (!name) {
             return null;
         }
@@ -739,7 +822,7 @@ exports.methods = {
         } while (panel.clipNames.has(name));
         return name;
     },
-    newClipTemplate () {
+    newClipTemplate() {
         const panel = this;
         // Verify the name
         return {
@@ -747,9 +830,10 @@ exports.methods = {
             from: 0,
             to: panel.rawClipInfo.duration,
             wrapMode: 2 /* Loop */,
+            speed: 1,
         };
     },
-    updateCurrentClipInfo () {
+    updateCurrentClipInfo() {
         const panel = this;
         if (!panel.animationInfos) {
             panel.currentClipInfo = null;
@@ -768,7 +852,9 @@ exports.methods = {
         const durationWidth = (duration / panel.rawClipInfo.duration) * panel.gridTableWith;
         const fps = info.fps !== undefined ? info.fps : panel.rawClipInfo.fps;
         const wrapMode = info.wrapMode ?? panel.rawClipInfo.wrapMode;
-
+        const speed = info.speed ?? panel.rawClipInfo.speed;
+        const additiveEnabled = (info.additive?.enabled) ?? panel.rawClipInfo.additiveEnabled;
+        const refClip = (info.additive?.refClip) ?? panel.rawClipInfo.refClip;
         panel.currentClipInfo = {
             name: info.name,
             from: info.from * fps,
@@ -788,6 +874,9 @@ exports.methods = {
             duration,
             fps,
             wrapMode,
+            speed,
+            additiveEnabled,
+            refClip,
         };
 
         const maxFrames = (panel.rawClipInfo.duration * panel.currentClipInfo.fps).toFixed(0);
@@ -797,6 +886,11 @@ exports.methods = {
         panel.$.clipFrames.innerText = maxFrames;
         panel.$.clipFPS.value = fps;
 
+        // TODO: hack for bug at 3d-tasks#10113. Because the new value would be limited in min and max, should firstly remove min and max.
+        panel.$.clipFrom.max = null;
+        panel.$.clipTo.min = null;
+        panel.$.clipTo.max = null;
+
         panel.$.clipFrom.value = startFrames;
         panel.$.clipFrom.setAttribute('max', endFrames);
 
@@ -805,8 +899,11 @@ exports.methods = {
         panel.$.clipTo.setAttribute('max', maxFrames);
 
         panel.$.wrapMode.value = panel.currentClipInfo.wrapMode;
+        panel.$.speed.value = panel.currentClipInfo.speed || 1;
+        panel.$.additiveEnabled.value = panel.currentClipInfo.additiveEnabled || false;
+        panel.$.refClip.value = panel.currentClipInfo.refClip || '';
     },
-    updateRawClipInfo () {
+    updateRawClipInfo() {
         const panel = this;
         if (!panel.animationInfos) {
             panel.rawClipInfo = null;
@@ -820,9 +917,9 @@ exports.methods = {
         const { name, duration, fps } = panel.animationInfos[panel.rawClipIndex];
         panel.rawClipInfo = { name, duration, fps };
 
-        panel.$.clipDuration.innerText = duration.toFixed(2);
+        panel.$.clipDuration.innerText = duration.toFixed(3);
     },
-    updateGridConfig () {
+    updateGridConfig() {
         const panel = this;
 
         if (!panel.currentClipInfo) {
@@ -847,7 +944,7 @@ exports.methods = {
             labelStep,
         };
     },
-    getStepAndSpacing (width, frames) {
+    getStepAndSpacing(width, frames) {
         const config = {
             minSpacing: 10,
             maxSpacing: 20,
@@ -867,7 +964,7 @@ exports.methods = {
             spacing,
         };
     },
-    onMouseDown (type) {
+    onMouseDown(type) {
         const panel = this;
 
         const info = panel.currentClipInfo;
@@ -896,7 +993,7 @@ exports.methods = {
         document.addEventListener('mousemove', panel.onMouseMoveBind);
         document.addEventListener('mouseup', panel.onMouseUpBind);
     },
-    onMouseMove (event) {
+    onMouseMove(event) {
         const panel = this;
 
         event.preventDefault();
@@ -936,7 +1033,7 @@ exports.methods = {
             panel.updateVirtualControl();
         });
     },
-    onMouseUp () {
+    onMouseUp() {
         const panel = this;
 
         if (!panel.virtualControl) {
@@ -950,9 +1047,9 @@ exports.methods = {
 
         // refresh data
         const splitInfo = panel.animationInfos[panel.rawClipIndex].splits[panel.splitClipIndex];
-        if (splitInfo[type].toFixed(2) !== value.toFixed(2)) {
+        if (splitInfo[type] !== value) {
             const { duration } = panel.rawClipInfo;
-            splitInfo[type] = Editor.Utils.Math.clamp(parseFloat(value.toFixed(2)), 0, duration);
+            splitInfo[type] = Editor.Utils.Math.clamp(value, 0, duration);
         }
 
         Elements.clips.update.call(panel);
@@ -965,12 +1062,13 @@ exports.methods = {
         const curClipInfo = panel.getCurClipInfo();
         Editor.Message.broadcast('fbx-inspector:animation-change', curClipInfo);
         panel.dispatch('change');
+        panel.dispatch('snapshot');
     },
-    updateVirtualControl () {
+    updateVirtualControl() {
         const panel = this;
 
         Object.assign(panel.$.controlVirtual.style, panel.virtualControl.style);
-        panel.$.controlVirtualNumber.innerText = panel.virtualControl.value.toFixed(2);
+        panel.$.controlVirtualNumber.innerText = panel.virtualControl.value.toFixed(3);
 
         if (panel.virtualControl.startFrame || panel.virtualControl.endFrame) {
             if (panel.virtualControl.type === 'left') {
@@ -980,7 +1078,7 @@ exports.methods = {
             }
         }
     },
-    onClipName (event) {
+    onClipName(event) {
         const panel = this;
 
         if (!panel.currentClipInfo) {
@@ -1003,9 +1101,10 @@ exports.methods = {
         panel.clipNames.add(name);
 
         panel.dispatch('change');
+        panel.dispatch('snapshot');
         Elements.clips.update.call(panel);
     },
-    onCutClip (event) {
+    onCutClip(event) {
         const panel = this;
 
         const path = event.target.getAttribute('path');
@@ -1015,21 +1114,116 @@ exports.methods = {
         Elements.editor.update.call(panel);
 
         panel.dispatch('change');
+        panel.dispatch('snapshot');
     },
-    onFpsChange (event) {
+    onFpsChange(event) {
         const panel = this;
 
         panel.animationInfos[panel.rawClipIndex].splits[panel.splitClipIndex].fps = Number(event.target.value);
 
         Elements.editor.update.call(panel);
         panel.dispatch('change');
+        panel.dispatch('snapshot');
     },
-    onWrapModeChange (event) {
+    onWrapModeChange(event) {
         const panel = this;
 
-        panel.animationInfos[panel.rawClipIndex].splits[panel.splitClipIndex].wrapMode = Number(event.target.value);
+        const wrapMode = Number(event.target.value);
+        panel.animationInfos[panel.rawClipIndex].splits[panel.splitClipIndex].wrapMode = wrapMode;
+        callModelPreviewFunction(
+            'setClipConfig',
+            {
+                wrapMode,
+            }
+        );
+        Elements.editor.update.call(panel);
+        panel.dispatch('change');
+        panel.dispatch('snapshot');
+    },
+    onSpeedChange(event) {
+        const panel = this;
+
+        const speed = Number(event.target.value);
+        panel.animationInfos[panel.rawClipIndex].splits[panel.splitClipIndex].speed = speed;
+        callModelPreviewFunction(
+            'setClipConfig',
+            {
+                speed,
+            }
+        );
 
         Elements.editor.update.call(panel);
         panel.dispatch('change');
+        panel.dispatch('snapshot');
     },
+    onAdditiveEnabledChanged(event) {
+        const panel = this;
+
+        const enabled = Boolean(event.target.value);
+        (panel.animationInfos[panel.rawClipIndex].splits[panel.splitClipIndex].additive ??= { enabled: false }).enabled = enabled;
+
+        Elements.editor.update.call(panel);
+        panel.dispatch('change');
+        panel.dispatch('snapshot');
+    },
+    onRefClipChanged(event) {
+        const panel = this;
+
+        const refClipUUID = String(event.target.value);
+        (panel.animationInfos[panel.rawClipIndex].splits[panel.splitClipIndex].additive ??= { enabled: false }).refClip = refClipUUID;
+
+        Elements.editor.update.call(panel);
+        panel.dispatch('change');
+        panel.dispatch('snapshot');
+    },
+    setProp(prop, type, event) {
+        setPropValue.call(this, prop, type, event);
+
+        this.dispatch('change');
+        this.dispatch('track', { tab: 'animation', prop, value: event.target.value });
+    },
+};
+
+exports.ready = function() {
+    for (const prop in Elements) {
+        const element = Elements[prop];
+        if (element.ready) {
+            element.ready.call(this);
+        }
+    }
+};
+
+exports.update = function(assetList, metaList) {
+    this.assetList = assetList;
+    this.metaList = metaList;
+    this.asset = assetList[0];
+    this.meta = metaList[0];
+
+    if (assetList.length > 1) {
+        this.$.container.setAttribute('multiple-invalid', '');
+        return;
+    } else {
+        this.$.container.removeAttribute('multiple-invalid');
+    }
+
+    for (const prop in Elements) {
+        const element = Elements[prop];
+        if (element.update) {
+            element.update.call(this);
+        }
+    }
+    this.initAnimationNameToUUIDMap();
+    this.initAnimationInfos();
+    if (this.animationInfos) {
+        this.onSelect(this.rawClipIndex, this.splitClipIndex);
+    }
+};
+
+exports.close = function() {
+    for (const prop in Elements) {
+        const element = Elements[prop];
+        if (element.close) {
+            element.close.call(this);
+        }
+    }
 };

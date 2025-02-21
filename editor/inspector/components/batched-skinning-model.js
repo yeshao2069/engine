@@ -1,10 +1,13 @@
-const { template, $, update } = require('./base');
+const { template, $, update, close } = require('./base');
+
+const { getMessageProtocolScene } = require('../utils/prop');
 
 exports.template = template;
 exports.$ = $;
 exports.update = update;
+exports.close = close;
 
-exports.ready = function () {
+exports.ready = function() {
     const $prop = document.createElement('ui-prop');
     this.$.componentContainer.before($prop);
 
@@ -19,23 +22,24 @@ exports.ready = function () {
     $button.innerText = 'Cook';
     $prop.appendChild($button);
 
-    $button.addEventListener('confirm', () => {
+    $button.addEventListener('confirm', async () => {
         const uuids = this.dump.value.uuid.values || [this.dump.value.uuid.value];
-
-        uuids.forEach((uuid) => {
-            Editor.Message.send('scene', 'execute-component-method', {
+        const undoID = await Editor.Message.request(getMessageProtocolScene(this.$this), 'begin-recording', uuids);
+        for (const uuid of uuids) {
+            await Editor.Message.request(getMessageProtocolScene(this.$this), 'execute-component-method', {
                 uuid: uuid,
                 name: 'cook',
                 args: [],
             });
-        });
+        }
 
-        uuids.forEach((uuid) => {
-            Editor.Message.send('scene', 'execute-component-method', {
+        for (const uuid of uuids) {
+            await Editor.Message.request(getMessageProtocolScene(this.$this), 'execute-component-method', {
                 uuid: uuid,
                 name: 'combine',
                 args: [],
             });
-        });
+        }
+        await Editor.Message.request(getMessageProtocolScene(this.$this), 'end-recording', undoID);
     });
 };

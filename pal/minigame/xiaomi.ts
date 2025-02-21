@@ -1,11 +1,36 @@
+/*
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
+
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+*/
+
 import { IMiniGame } from 'pal/minigame';
-import { Orientation } from '../system/enum-type/orientation';
+import { checkPalIntegrity, withImpl } from '../integrity-check';
+import { Orientation } from '../screen-adapter/enum-type';
 import { cloneObject, createInnerAudioContextPolyfill } from '../utils';
+import { warn } from '../../cocos/core/platform/debug';
 
 declare let qg: any;
 
-// @ts-expect-error can't init minigame when it's declared
-const minigame: IMiniGame = {};
+const minigame: IMiniGame = {} as IMiniGame;
 cloneObject(minigame, qg);
 
 // #region SystemInfo
@@ -31,16 +56,16 @@ Object.defineProperty(minigame, 'orientation', {
 // #endregion SystemInfo
 
 // #region TouchEvent
-minigame.onTouchStart = function (cb) {
+minigame.onTouchStart = (cb): void => {
     window.canvas.ontouchstart = cb;
 };
-minigame.onTouchMove = function (cb) {
+minigame.onTouchMove = (cb): void => {
     window.canvas.ontouchmove = cb;
 };
-minigame.onTouchEnd = function (cb) {
+minigame.onTouchEnd = (cb): void => {
     window.canvas.ontouchend = cb;
 };
-minigame.onTouchCancel = function (cb) {
+minigame.onTouchCancel = (cb): void => {
     window.canvas.ontouchcancel = cb;
 };
 // #endregion TouchEvent
@@ -54,11 +79,11 @@ minigame.onTouchCancel = function (cb) {
 // #region Accelerometer
 let _customAccelerometerCb: AccelerometerChangeCallback | undefined;
 let _innerAccelerometerCb: AccelerometerChangeCallback | undefined;
-minigame.onAccelerometerChange = function (cb: AccelerometerChangeCallback) {
+minigame.onAccelerometerChange = (cb: AccelerometerChangeCallback): void => {
     // qg.offAccelerometerChange() is not supported.
     // so we can only register AccelerometerChange callback, but can't unregister.
     if (!_innerAccelerometerCb) {
-        _innerAccelerometerCb = (res: any) => {
+        _innerAccelerometerCb = (res: any): void => {
             let x = res.x;
             let y = res.y;
             if (minigame.isLandscape) {
@@ -82,40 +107,50 @@ minigame.onAccelerometerChange = function (cb: AccelerometerChangeCallback) {
     }
     _customAccelerometerCb = cb;
 };
-minigame.offAccelerometerChange = function (cb?: AccelerometerChangeCallback) {
+minigame.offAccelerometerChange = (cb?: AccelerometerChangeCallback): void => {
     // qg.offAccelerometerChange() is not supported.
     _customAccelerometerCb = undefined;
 };
 // #endregion Accelerometer
 
+// #region InnerAudioContext
 minigame.createInnerAudioContext = createInnerAudioContextPolyfill(qg, {
     onPlay: true,
     onPause: true,
     onStop: true,
     onSeek: false,
 });
+const originalCreateInnerAudioContext = minigame.createInnerAudioContext;
+minigame.createInnerAudioContext = (): InnerAudioContext => {
+    const audioContext = originalCreateInnerAudioContext.call(minigame);
+    const originalStop = audioContext.stop;
+    Object.defineProperty(audioContext, 'stop', {
+        configurable: true,
+        value (): void {
+            // NOTE: stop won't seek to 0 when audio is paused on Xiaomi platform.
+            audioContext.seek(0);
+            originalStop.call(audioContext);
+        },
+    });
+    return audioContext;
+};
+// #endregion InnerAudioContext
 
-minigame.getSafeArea = function () {
-    console.warn('getSafeArea is not supported on this platform');
-    if (minigame.getSystemInfoSync) {
-        const systemInfo =  minigame.getSystemInfoSync();
-        return {
-            top: 0,
-            left: 0,
-            bottom: systemInfo.screenHeight,
-            right: systemInfo.screenWidth,
-            width: systemInfo.screenWidth,
-            height: systemInfo.screenHeight,
-        };
-    }
+// #region SafeArea
+minigame.getSafeArea = (): SafeArea => {
+    warn('getSafeArea is not supported on this platform');
+    const systemInfo =  minigame.getSystemInfoSync();
     return {
         top: 0,
         left: 0,
-        bottom: 0,
-        right: 0,
-        width: 0,
-        height: 0,
+        bottom: systemInfo.screenHeight,
+        right: systemInfo.screenWidth,
+        width: systemInfo.screenWidth,
+        height: systemInfo.screenHeight,
     };
 };
+// #endregion SafeArea
 
 export { minigame };
+
+checkPalIntegrity<typeof import('pal/minigame')>(withImpl<typeof import('./xiaomi')>());

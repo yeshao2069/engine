@@ -1,17 +1,33 @@
-/**
- * @packageDocumentation
- * @hidden
- */
+/*
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
+
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+*/
+
 import b2 from '@cocos/box2d';
-import { EDITOR } from 'internal:constants';
+import { EDITOR_NOT_IN_PREVIEW, TEST } from 'internal:constants';
 
 import { IPhysicsWorld } from '../spec/i-physics-world';
-import { IVec2Like, Vec3, Quat, toRadian, Vec2, toDegree, Rect, Node, game, CCObject, find, director } from '../../core';
+import { IVec2Like, Vec3, Quat, Vec2, toDegree, Rect, CCObjectFlags, js, errorID } from '../../core';
 import { PHYSICS_2D_PTM_RATIO, ERaycast2DType, ERigidBody2DType } from '../framework/physics-types';
-import { array } from '../../core/utils/js';
-import { Canvas } from '../../2d/framework';
-import { Graphics } from '../../2d/components';
-
 import { b2RigidBody2D } from './rigid-body';
 import { PhysicsContactListener } from './platform/physics-contact-listener';
 import { PhysicsAABBQueryCallback } from './platform/physics-aabb-query-callback';
@@ -20,6 +36,9 @@ import { PhysicsContact, b2ContactExtends } from './physics-contact';
 import { Contact2DType, Collider2D, RaycastResult2D } from '../framework';
 import { b2Shape2D } from './shapes/shape-2d';
 import { PhysicsDebugDraw } from './platform/physics-debug-draw';
+import { Node, find, Layers } from '../../scene-graph';
+import { director } from '../../game';
+import type { Graphics } from '../../2d/components/graphics';
 
 const tempVec3 = new Vec3();
 const tempVec2_1 = new Vec2();
@@ -30,22 +49,31 @@ const tempB2AABB = new b2.AABB();
 
 const testResults: Collider2D[] = [];
 
+/** @mangle */
 export class b2PhysicsWorld implements IPhysicsWorld {
     protected _world: b2.World;
     protected _bodies: b2RigidBody2D[] = [];
     protected _animatedBodies: b2RigidBody2D[] = [];
+    protected _rotationAxis: Vec3 = new Vec3();
+    protected _physicsGroundBody: b2.Body;
 
     protected _contactListener: PhysicsContactListener;
     protected _aabbQueryCallback: PhysicsAABBQueryCallback;
     protected _raycastQueryCallback: PhysicsRayCastCallback;
 
-    get impl () {
+    get impl (): b2.World {
         return this._world;
+    }
+
+    get groundBodyImpl (): b2.Body {
+        return this._physicsGroundBody;
     }
 
     constructor () {
         this._world = new b2.World(new b2.Vec2(0, -10));
-
+        const tempBodyDef = new b2.BodyDef();
+        //tempBodyDef.position.Set(480 / PHYSICS_2D_PTM_RATIO, 320 / PHYSICS_2D_PTM_RATIO);//temporary
+        this._physicsGroundBody = this._world.CreateBody(tempBodyDef);
         const listener = new PhysicsContactListener();
         listener.setBeginContact(this._onBeginContact);
         listener.setEndContact(this._onEndContact);
@@ -63,11 +91,11 @@ export class b2PhysicsWorld implements IPhysicsWorld {
     _b2DebugDrawer: b2.Draw | null = null;
 
     _debugDrawFlags = 0;
-    get debugDrawFlags () {
+    get debugDrawFlags (): number {
         return this._debugDrawFlags;
     }
     set debugDrawFlags (v) {
-        if (EDITOR) return;
+        if (EDITOR_NOT_IN_PREVIEW) return;
 
         if (!v) {
             if (this._debugGraphics) {
@@ -78,52 +106,62 @@ export class b2PhysicsWorld implements IPhysicsWorld {
         this._debugDrawFlags = v;
     }
 
-    _checkDebugDrawValid () {
-        if (EDITOR) return;
+    _checkDebugDrawValid (): void {
+        if (EDITOR_NOT_IN_PREVIEW) return;
         if (!this._debugGraphics || !this._debugGraphics.isValid) {
             let canvas = find('Canvas');
             if (!canvas) {
-                const scene = director.getScene() as any;
+                const scene = director.getScene();
                 if (!scene) {
                     return;
                 }
 
                 canvas = new Node('Canvas');
-                canvas.addComponent(Canvas);
+                canvas.addComponent('cc.Canvas');
                 canvas.parent = scene;
             }
 
-            const node = new Node('PHYSICS_2D_DEBUG_DRAW');
+            let node: Node | null = new Node('PHYSICS_2D_DEBUG_DRAW');
             // node.zIndex = cc.macro.MAX_ZINDEX;
-            node.hideFlags |= CCObject.Flags.DontSave;
+            node.hideFlags |= CCObjectFlags.DontSave;
             node.parent = canvas;
             node.worldPosition = Vec3.ZERO;
+            node.layer = Layers.Enum.UI_2D;
 
-            this._debugGraphics = node.addComponent(Graphics);
-            this._debugGraphics.lineWidth = 2;
+            try {
+                this._debugGraphics = node.addComponent('cc.Graphics') as Graphics;
+                this._debugGraphics.lineWidth = 3;
 
-            const debugDraw = new PhysicsDebugDraw(this._debugGraphics);
-            this._b2DebugDrawer = debugDraw;
-            this._world.SetDebugDraw(debugDraw);
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+                const debugDraw = new PhysicsDebugDraw(this._debugGraphics);
+                this._b2DebugDrawer = debugDraw;
+                this._world.SetDebugDraw(debugDraw);
+            } catch (e: any) {
+                errorID(4501, e.message as string);
+                node.destroy();
+                node = null;
+            }
         }
 
-        const parent = this._debugGraphics.node.parent!;
-        this._debugGraphics.node.setSiblingIndex(parent.children.length - 1);
+        if (this._debugGraphics) {
+            const parent = this._debugGraphics.node.parent!;
+            this._debugGraphics.node.setSiblingIndex(parent.children.length - 1);
+        }
 
         if (this._b2DebugDrawer) {
             this._b2DebugDrawer.SetFlags(this.debugDrawFlags);
         }
     }
 
-    setGravity (v: IVec2Like) {
+    setGravity (v: IVec2Like): void {
         this._world.SetGravity(v as b2.Vec2);
     }
 
-    setAllowSleep (v: boolean) {
+    setAllowSleep (v: boolean): void {
         this._world.SetAllowSleeping(true);
     }
 
-    step (deltaTime: number, velocityIterations = 10, positionIterations = 10) {
+    step (deltaTime: number, velocityIterations = 10, positionIterations = 10): void {
         const animatedBodies = this._animatedBodies;
         for (let i = 0, l = animatedBodies.length; i < l; i++) {
             animatedBodies[i].animate(deltaTime);
@@ -147,7 +185,7 @@ export class b2PhysicsWorld implements IPhysicsWorld {
         callback.init(type, mask);
         this._world.RayCast(callback, tempVec2_1, tempVec2_2);
 
-        const fixtures = callback.getFixtures();
+        const fixtures = callback.getFixtures() as b2.Fixture[];
         if (fixtures.length > 0) {
             const points = callback.getPoints();
             const normals = callback.getNormals();
@@ -195,7 +233,7 @@ export class b2PhysicsWorld implements IPhysicsWorld {
         return [];
     }
 
-    syncPhysicsToScene () {
+    syncPhysicsToScene (): void {
         const bodies = this._bodies;
         for (let i = 0, l = bodies.length; i < l; i++) {
             const body = bodies[i];
@@ -220,15 +258,14 @@ export class b2PhysicsWorld implements IPhysicsWorld {
             node.setWorldRotationFromEuler(0, 0, angle);
         }
     }
-    syncSceneToPhysics () {
+    syncSceneToPhysics (): void {
         const bodies = this._bodies;
         for (let i = 0; i < bodies.length; i++) {
-            bodies[i].syncRotationToPhysics();
-            bodies[i].syncPositionToPhysics();
+            bodies[i].syncSceneToPhysics();
         }
     }
 
-    addBody (body: b2RigidBody2D) {
+    addBody (body: b2RigidBody2D): void {
         const bodies = this._bodies;
         if (bodies.includes(body)) {
             return;
@@ -250,8 +287,11 @@ export class b2PhysicsWorld implements IPhysicsWorld {
         const pos = node.worldPosition;
         bodyDef.position.Set(pos.x / PHYSICS_2D_PTM_RATIO, pos.y / PHYSICS_2D_PTM_RATIO);
 
-        Quat.toEuler(tempVec3, node.worldRotation);
-        bodyDef.angle = toRadian(tempVec3.z);
+        tempVec3.z = Quat.getAxisAngle(this._rotationAxis, node.worldRotation);
+        if (this._rotationAxis.z < 0.0) {
+            tempVec3.z = Math.PI * 2 - tempVec3.z;
+        }
+        bodyDef.angle = tempVec3.z;
 
         bodyDef.awake = comp.awakeOnLoad;
 
@@ -267,10 +307,10 @@ export class b2PhysicsWorld implements IPhysicsWorld {
 
         // read private property
         const compPrivate = comp as any;
-        const linearVelocity = compPrivate._linearVelocity;
+        const linearVelocity = compPrivate._linearVelocity as Vec2;
         bodyDef.linearVelocity.Set(linearVelocity.x, linearVelocity.y);
 
-        bodyDef.angularVelocity = toRadian(compPrivate._angularVelocity);
+        bodyDef.angularVelocity = compPrivate._angularVelocity;
 
         const b2Body = this._world.CreateBody(bodyDef);
         b2Body.m_userData = body;
@@ -279,7 +319,7 @@ export class b2PhysicsWorld implements IPhysicsWorld {
         this._bodies.push(body);
     }
 
-    removeBody (body: b2RigidBody2D) {
+    removeBody (body: b2RigidBody2D): void {
         if (!this._bodies.includes(body)) {
             return;
         }
@@ -288,18 +328,31 @@ export class b2PhysicsWorld implements IPhysicsWorld {
             this._world.DestroyBody(body.impl);
             body._imp = null;
         }
-        array.remove(this._bodies, body);
+        js.array.remove(this._bodies, body);
 
         const comp = body.rigidBody;
         if (comp.type === ERigidBody2DType.Animated) {
-            array.remove(this._animatedBodies, body);
+            js.array.remove(this._animatedBodies, body);
         }
     }
 
-    registerContactFixture (fixture: b2.Fixture) {
+    public _updateBodyType (body: b2RigidBody2D): void {
+        const animatedBodies = this._animatedBodies;
+        const comp = body.rigidBody;
+        if (comp.type !== ERigidBody2DType.Animated) {
+            js.array.remove(animatedBodies, body);
+        } else {
+            if (animatedBodies.includes(body)) {
+                return;
+            }
+            animatedBodies.push(body);
+        }
+    }
+
+    registerContactFixture (fixture: b2.Fixture): void {
         this._contactListener.registerContactFixture(fixture);
     }
-    unregisterContactFixture (fixture: b2.Fixture) {
+    unregisterContactFixture (fixture: b2.Fixture): void {
         this._contactListener.unregisterContactFixture(fixture);
     }
 
@@ -349,7 +402,8 @@ export class b2PhysicsWorld implements IPhysicsWorld {
         return testResults;
     }
 
-    drawDebug () {
+    drawDebug (): void {
+        if (TEST) return;
         this._checkDebugDrawValid();
 
         if (!this._debugGraphics) {
@@ -359,12 +413,12 @@ export class b2PhysicsWorld implements IPhysicsWorld {
         this._world.DrawDebugData();
     }
 
-    _onBeginContact (b2contact: b2ContactExtends) {
+    _onBeginContact (b2contact: b2ContactExtends): void {
         const c = PhysicsContact.get(b2contact);
         c.emit(Contact2DType.BEGIN_CONTACT);
     }
 
-    _onEndContact (b2contact: b2ContactExtends) {
+    _onEndContact (b2contact: b2ContactExtends): void {
         const c = b2contact.m_userData as PhysicsContact;
         if (!c) {
             return;
@@ -374,7 +428,7 @@ export class b2PhysicsWorld implements IPhysicsWorld {
         PhysicsContact.put(b2contact);
     }
 
-    _onPreSolve (b2contact: b2ContactExtends) {
+    _onPreSolve (b2contact: b2ContactExtends): void {
         const c = b2contact.m_userData as PhysicsContact;
         if (!c) {
             return;
@@ -383,7 +437,7 @@ export class b2PhysicsWorld implements IPhysicsWorld {
         c.emit(Contact2DType.PRE_SOLVE);
     }
 
-    _onPostSolve (b2contact: b2ContactExtends, impulse: b2.ContactImpulse) {
+    _onPostSolve (b2contact: b2ContactExtends, impulse: b2.ContactImpulse): void {
         const c: PhysicsContact = b2contact.m_userData as PhysicsContact;
         if (!c) {
             return;

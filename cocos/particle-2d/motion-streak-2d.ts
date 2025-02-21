@@ -1,19 +1,18 @@
 /*
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -22,21 +21,17 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-
-/**
- * @packageDocumentation
- * @module particle2d
- */
+*/
 
 import { ccclass, executeInEditMode, serializable, playOnFocus, menu, help, editable, type } from 'cc.decorator';
-import { EDITOR } from 'internal:constants';
-import { Renderable2D } from '../2d/framework';
-import { Texture2D } from '../core/assets/texture-2d';
-import { Batcher2D } from '../2d/renderer/batcher-2d';
+import { EDITOR_NOT_IN_PREVIEW } from 'internal:constants';
+import { UIRenderer } from '../2d/framework';
+import { Texture2D } from '../asset/assets/texture-2d';
+import type { IBatcher } from '../2d/renderer/i-batcher';
 import { Vec2 } from '../core';
+import type { RenderData } from '../2d/renderer/render-data';
 
-class Point {
+export class Point {
     public point = new Vec2();
     public dir = new Vec2();
     public distance = 0;
@@ -47,12 +42,12 @@ class Point {
         if (dir) this.dir.set(dir);
     }
 
-    public setPoint (x, y) {
+    public setPoint (x: number, y: number): void {
         this.point.x = x;
         this.point.y = y;
     }
 
-    public setDir (x, y) {
+    public setDir (x: number, y: number): void {
         this.dir.x = x;
         this.dir.y = y;
     }
@@ -74,15 +69,19 @@ class Point {
 @playOnFocus
 @menu('Effects/MotionStreak')
 @help('i18n:COMPONENT.help_url.motionStreak')
-export class MotionStreak extends Renderable2D {
+export class MotionStreak extends UIRenderer {
     public static Point = Point;
+
+    constructor () {
+        super();
+    }
 
     /**
      * @en Preview the trailing effect in editor mode.
      * @zh 在编辑器模式下预览拖尾效果。
      */
     @editable
-    public get preview () {
+    public get preview (): boolean {
         return this._preview;
     }
 
@@ -97,7 +96,7 @@ export class MotionStreak extends Renderable2D {
      * motionStreak.fadeTime = 3;
      */
     @editable
-    public get fadeTime () {
+    public get fadeTime (): number {
         return this._fadeTime;
     }
 
@@ -112,7 +111,7 @@ export class MotionStreak extends Renderable2D {
      * motionStreak.minSeg = 3;
      */
     @editable
-    public get minSeg () {
+    public get minSeg (): number {
         return this._minSeg;
     }
     public set minSeg (val) {
@@ -125,7 +124,7 @@ export class MotionStreak extends Renderable2D {
      * motionStreak.stroke = 64;
      */
     @editable
-    public get stroke () {
+    public get stroke (): number {
         return this._stroke;
     }
     public set stroke (val) {
@@ -139,7 +138,7 @@ export class MotionStreak extends Renderable2D {
      * motionStreak.texture = newTexture;
      */
     @type(Texture2D)
-    public get texture () {
+    public get texture (): Texture2D | null {
         return this._texture;
     }
 
@@ -155,14 +154,14 @@ export class MotionStreak extends Renderable2D {
      * motionStreak.fastMode = true;
      */
     @editable
-    public get fastMode () {
+    public get fastMode (): boolean {
         return this._fastMode;
     }
     public set fastMode (val: boolean) {
         this._fastMode = val;
     }
 
-    public get points () {
+    public get points (): Point[] {
         return this._points;
     }
 
@@ -180,13 +179,13 @@ export class MotionStreak extends Renderable2D {
     private _fastMode = false;
     private _points: Point[] = [];
 
-    public onEnable () {
+    public onEnable (): void {
         super.onEnable();
         this.reset();
     }
 
-    protected _flushAssembler () {
-        const assembler = MotionStreak.Assembler!.getAssembler(this);
+    protected _flushAssembler (): void {
+        const assembler = MotionStreak.Assembler.getAssembler(this);
 
         if (this._assembler !== assembler) {
             this._assembler = assembler;
@@ -194,19 +193,20 @@ export class MotionStreak extends Renderable2D {
 
         if (!this._renderData) {
             if (this._assembler && this._assembler.createData) {
-                this._renderData = this._assembler.createData(this);
-                this._renderData!.material = this.material;
+                this._renderData = this._assembler.createData(this) as RenderData;
+                this._renderData.material = this.material;
+                this._updateColor();
             }
         }
     }
 
-    public onFocusInEditor () {
+    public onFocusInEditor (): void {
         if (this._preview) {
             this.reset();
         }
     }
 
-    public onLostFocusInEditor () {
+    public onLostFocusInEditor (): void {
         if (this._preview) {
             this.reset();
         }
@@ -219,17 +219,22 @@ export class MotionStreak extends Renderable2D {
      * // Remove all living segments of the ribbon.
      * myMotionStreak.reset();
      */
-    public reset () {
+    public reset (): void {
         this._points.length = 0;
         if (this._renderData) this._renderData.clear();
     }
 
-    public lateUpdate (dt) {
-        if (EDITOR && !this._preview) return;
-        if (this._assembler) this._assembler.update(this, dt);
+    public lateUpdate (dt: number): void {
+        if (EDITOR_NOT_IN_PREVIEW && !this._preview) return;
+        if (this._assembler && this._assembler.update) {
+            this._assembler.update(this, dt);
+        }
     }
 
-    public _render (render: Batcher2D) {
-        render.commitComp(this, this._texture, this._assembler, null);
+    /**
+     * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
+     */
+    public _render (render: IBatcher): void {
+        render.commitComp(this, this._renderData, this._texture, this._assembler, null);
     }
 }

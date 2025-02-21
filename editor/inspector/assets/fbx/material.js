@@ -1,8 +1,10 @@
 'use strict';
 
+const { updateElementReadonly, updateElementInvalid } = require('../../utils/assets');
+
 const { join, dirname } = require('path');
 
-exports.template = `
+exports.template = /* html */`
 <div class="container">
     <ui-prop>
         <ui-label slot="label" value="i18n:ENGINE.assets.fbx.GlTFUserData.dumpMaterials.name" tooltip="i18n:ENGINE.assets.fbx.GlTFUserData.dumpMaterials.title"></ui-label>
@@ -24,10 +26,11 @@ exports.template = `
 </div>
 `;
 
-exports.style = `
-ui-prop,
-.images
-ui-section {
+exports.style = /* css */`
+ui-prop { margin-right: 4px; }
+ui-section.config { margin-right: 0; }
+
+.images {
     margin: 4px 0;
 }
 
@@ -64,9 +67,6 @@ exports.$ = {
     images: '.images',
 };
 
-/**
- * attribute corresponds to the edit element
- */
 const Elements = {
     dumpMaterials: {
         ready() {
@@ -77,14 +77,17 @@ const Elements = {
 
                 Elements.materialDumpDir.update.bind(panel)();
             });
+            panel.$.dumpMaterialsCheckbox.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
+            });
         },
         update() {
             const panel = this;
 
             panel.$.dumpMaterialsCheckbox.value = panel.getDefault(panel.meta.userData.dumpMaterials, false);
 
-            panel.updateInvalid(panel.$.dumpMaterialsCheckbox, 'dumpMaterials');
-            panel.updateReadonly(panel.$.dumpMaterialsCheckbox);
+            updateElementInvalid.call(panel, panel.$.dumpMaterialsCheckbox, 'dumpMaterials');
+            updateElementReadonly.call(panel, panel.$.dumpMaterialsCheckbox);
         },
     },
     materialDumpDir: {
@@ -139,8 +142,8 @@ const Elements = {
 
             panel.$.materialDumpDirFile.value = materialDumpDir;
 
-            panel.updateInvalid(panel.$.materialDumpDirFile, 'materialDumpDir');
-            panel.updateReadonly(panel.$.materialDumpDirFile);
+            updateElementInvalid.call(panel, panel.$.materialDumpDirFile, 'materialDumpDir');
+            updateElementReadonly.call(panel, panel.$.materialDumpDirFile);
         },
     },
     useVertexColors: {
@@ -148,14 +151,17 @@ const Elements = {
             const panel = this;
 
             panel.$.useVertexColorsCheckbox.addEventListener('change', panel.setProp.bind(panel, 'useVertexColors'));
+            panel.$.useVertexColorsCheckbox.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
+            });
         },
         update() {
             const panel = this;
 
-            panel.$.useVertexColorsCheckbox.value = panel.getDefault(panel.meta.userData.useVertexColors, true);
+            panel.$.useVertexColorsCheckbox.value = panel.getDefault(panel.meta.userData.useVertexColors, false);
 
-            panel.updateInvalid(panel.$.useVertexColorsCheckbox, 'useVertexColors');
-            panel.updateReadonly(panel.$.useVertexColorsCheckbox);
+            updateElementInvalid.call(panel, panel.$.useVertexColorsCheckbox, 'useVertexColors');
+            updateElementReadonly.call(panel, panel.$.useVertexColorsCheckbox);
         },
     },
     depthWriteInAlphaModeBlend: {
@@ -163,14 +169,17 @@ const Elements = {
             const panel = this;
 
             panel.$.depthWriteInAlphaModeBlendCheckbox.addEventListener('change', panel.setProp.bind(panel, 'depthWriteInAlphaModeBlend'));
+            panel.$.depthWriteInAlphaModeBlendCheckbox.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
+            });
         },
         update() {
             const panel = this;
 
             panel.$.depthWriteInAlphaModeBlendCheckbox.value = panel.getDefault(panel.meta.userData.depthWriteInAlphaModeBlend, false);
 
-            panel.updateInvalid(panel.$.depthWriteInAlphaModeBlendCheckbox, 'depthWriteInAlphaModeBlend');
-            panel.updateReadonly(panel.$.depthWriteInAlphaModeBlendCheckbox);
+            updateElementInvalid.call(panel, panel.$.depthWriteInAlphaModeBlendCheckbox, 'depthWriteInAlphaModeBlend');
+            updateElementReadonly.call(panel, panel.$.depthWriteInAlphaModeBlendCheckbox);
         },
     },
     images: {
@@ -268,10 +277,9 @@ const Elements = {
                         }
                         url = asset.source;
                     }
-
                     image.remapUuid = uuid;
                     image.remap = url;
-                    panel.meta.userData.imageMetas[index].remap = url;
+                    panel.meta.userData.imageMetas[index].remap = uuid;
 
                     const remapAsPropContentImg = remapAsPropContent.querySelector('.image');
 
@@ -282,6 +290,7 @@ const Elements = {
                     }
 
                     this.dispatch('change');
+                    this.dispatch('snapshot');
                 });
 
                 if (image.remap) {
@@ -316,38 +325,6 @@ const Elements = {
     },
 };
 
-exports.update = function (assetList, metaList) {
-    this.assetList = assetList;
-    this.metaList = metaList;
-    this.asset = assetList[0];
-    this.meta = metaList[0];
-
-    for (const prop in Elements) {
-        const element = Elements[prop];
-        if (element.update) {
-            element.update.call(this);
-        }
-    }
-};
-
-exports.ready = function () {
-    for (const prop in Elements) {
-        const element = Elements[prop];
-        if (element.ready) {
-            element.ready.call(this);
-        }
-    }
-};
-
-exports.close = function () {
-    for (const prop in Elements) {
-        const element = Elements[prop];
-        if (element.close) {
-            element.close.call(this);
-        }
-    }
-};
-
 exports.methods = {
     setProp(prop, event) {
         this.metaList.forEach((meta) => {
@@ -355,25 +332,7 @@ exports.methods = {
         });
 
         this.dispatch('change');
-    },
-    /**
-     * Update whether a data is editable in multi-select state
-     */
-    updateInvalid(element, prop) {
-        const invalid = this.metaList.some((meta) => {
-            return meta.userData[prop] !== this.meta.userData[prop];
-        });
-        element.invalid = invalid;
-    },
-    /**
-     * Update read-only status
-     */
-    updateReadonly(element) {
-        if (this.asset.readonly) {
-            element.setAttribute('disabled', true);
-        } else {
-            element.removeAttribute('disabled');
-        }
+        this.dispatch('track', { tab: 'material', prop, value: event.target.value });
     },
     getDefault(value, def, prop) {
         if (value === undefined) {
@@ -396,4 +355,36 @@ exports.methods = {
         image.setAttribute('slot', 'content');
         parent.appendChild(image);
     },
+};
+
+exports.ready = function() {
+    for (const prop in Elements) {
+        const element = Elements[prop];
+        if (element.ready) {
+            element.ready.call(this);
+        }
+    }
+};
+
+exports.update = function(assetList, metaList) {
+    this.assetList = assetList;
+    this.metaList = metaList;
+    this.asset = assetList[0];
+    this.meta = metaList[0];
+
+    for (const prop in Elements) {
+        const element = Elements[prop];
+        if (element.update) {
+            element.update.call(this);
+        }
+    }
+};
+
+exports.close = function() {
+    for (const prop in Elements) {
+        const element = Elements[prop];
+        if (element.close) {
+            element.close.call(this);
+        }
+    }
 };

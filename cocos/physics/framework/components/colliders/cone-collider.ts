@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,12 +20,7 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-
-/**
- * @packageDocumentation
- * @module physics
- */
+*/
 
 import {
     ccclass,
@@ -37,7 +31,6 @@ import {
     type,
     serializable,
 } from 'cc.decorator';
-import { EDITOR, TEST } from 'internal:constants';
 import { Collider } from './collider';
 import { IConeShape } from '../../../spec/i-physics-shape';
 import { EAxisDirection, EColliderType } from '../../physics-enum';
@@ -62,15 +55,14 @@ export class ConeCollider extends Collider {
      * 获取或设置圆锥体上圆面半径。
      */
     @tooltip('i18n:physics3d.collider.cone_radius')
-    public get radius () {
+    public get radius (): number {
         return this._radius;
     }
 
     public set radius (value) {
         if (this._radius === value) return;
-        if (value < 0) value = 0;
-        this._radius = value;
-        if (!EDITOR && !TEST) {
+        this._radius = Math.abs(value);
+        if (this._shape) {
             this.shape.setRadius(value);
         }
     }
@@ -82,7 +74,7 @@ export class ConeCollider extends Collider {
      * 获取或设置圆锥体在相应轴向的高度。
      */
     @tooltip('i18n:physics3d.collider.cone_height')
-    public get height () {
+    public get height (): number {
         return this._height;
     }
 
@@ -90,7 +82,7 @@ export class ConeCollider extends Collider {
         if (this._height === value) return;
         if (value < 0) value = 0;
         this._height = value;
-        if (!EDITOR && !TEST) {
+        if (this._shape) {
             this.shape.setHeight(value);
         }
     }
@@ -103,7 +95,7 @@ export class ConeCollider extends Collider {
      */
     @type(EAxisDirection)
     @tooltip('i18n:physics3d.collider.cone_direction')
-    public get direction () {
+    public get direction (): EAxisDirection {
         return this._direction;
     }
 
@@ -111,12 +103,12 @@ export class ConeCollider extends Collider {
         if (this._direction === value) return;
         if (value < EAxisDirection.X_AXIS || value > EAxisDirection.Z_AXIS) return;
         this._direction = value;
-        if (!EDITOR && !TEST) {
+        if (this._shape) {
             this.shape.setDirection(value);
         }
     }
 
-    public get shape () {
+    public get shape (): IConeShape {
         return this._shape as IConeShape;
     }
 

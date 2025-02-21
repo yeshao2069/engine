@@ -1,12 +1,17 @@
-const { template, $, update } = require('./base');
+const { template, $, update, close } = require('./base');
+const { getMessageProtocolScene } = require('../utils/prop');
+
+// 排列时，相邻元素的间隔间距
+const MARGIN = '4px';
 
 exports.template = template;
 exports.$ = $;
 exports.update = update;
+exports.close = close;
 
 const { setHidden, setDisabled, isMultipleInvalid } = require('../utils/prop');
 
-exports.ready = function () {
+exports.ready = function() {
     // Handling in-line displayed attributes
     const needToInlines = [
         'life',
@@ -26,35 +31,17 @@ exports.ready = function () {
     ];
 
     this.elements = {
-        customMaterial: {
-            displayOrder: 0,
-        },
-        color: {
-            displayOrder: 1,
-        },
-        preview: {
-            displayOrder: 2,
-        },
-        playOnLoad: {
-            displayOrder: 3,
-        },
-        autoRemoveOnFinish: {
-            displayOrder: 4,
-        },
         file: {
-            displayOrder: 5,
             update(element, dump) {
                 setDisabled(!dump.file.value.uuid, this.$.syncButton);
             },
         },
         custom: {
-            displayOrder: 6,
             ready(element) {
-                element.classList.add('flex');
-
                 const $checkbox = element.querySelector('ui-checkbox[slot="content"]');
 
                 const $sync = document.createElement('ui-button');
+                $sync.setAttribute('style', `margin-right: ${MARGIN}`);
                 $sync.setAttribute('slot', 'content');
                 $sync.setAttribute('class', 'blue');
                 $sync.setAttribute('tooltip', 'i18n:ENGINE.components.particle_system_2d.sync_tips');
@@ -64,7 +51,7 @@ exports.ready = function () {
                 $checkbox.after($sync);
 
                 // Hack: ui-button has extra events that are passed up to ui-prop ;
-                $sync.addEventListener('change', async (event) => {
+                $sync.addEventListener('change', (event) => {
                     event.stopPropagation();
                 });
 
@@ -105,6 +92,7 @@ exports.ready = function () {
                         }
 
                         this.$this.dispatch('change-dump');
+                        this.$this.dispatch('confirm-dump');
                     }
                 });
 
@@ -117,14 +105,14 @@ exports.ready = function () {
                 $export.appendChild($exportLabel);
                 $sync.after($export);
 
-                $export.addEventListener('change', async (event) => {
+                $export.addEventListener('change', (event) => {
                     event.stopPropagation();
                 });
 
                 $export.addEventListener('confirm', async (event) => {
                     event.stopPropagation();
 
-                    let assetInfo = await Editor.Message.request('scene', 'export-particle-plist', this.dump.value.uuid.value);
+                    let assetInfo = await Editor.Message.request(getMessageProtocolScene(this.$this), 'export-particle-plist', this.dump.value.uuid.value);
                     if (assetInfo) {
                         let values = [this.$this.dump.value];
                         if (this.$this.dump.values) {
@@ -141,6 +129,7 @@ exports.ready = function () {
                         }
 
                         this.$this.dispatch('change-dump');
+                        this.$this.dispatch('confirm-dump');
                     }
                 });
 
@@ -178,7 +167,7 @@ exports.ready = function () {
 
                     $right.setAttribute('no-label', '');
                     $right.setAttribute('slot', 'content');
-                    $right.setAttribute('style', 'margin: 0');
+                    $right.setAttribute('style', `margin-left: ${MARGIN}`);
                     $left.appendChild($right);
                 });
 
@@ -212,13 +201,13 @@ exports.ready = function () {
             isAppendToParent() {
                 const $left = this.$[key];
                 const $right = this.$[`${key}Var`];
-        
+
                 if ($left && $right && $right.parentNode === $left) {
                     return false;
                 }
-        
+
                 return true;
-            }
+            },
         };
     });
 };

@@ -1,3 +1,31 @@
+/*
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
+
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+*/
+
+/**
+ * @engineInternal Since v3.7.2, this is an engine private enum type.
+ * @deprecated Since v3.7.2, will be removed in the future.
+ */
 export enum ExtensionType {
     FFD = 0,
     AdjustColor = 10,
@@ -8,12 +36,21 @@ export enum ExtensionType {
     GradientBevelFilter = 15,
     GradientGlowFilter = 16
 }
-
-export enum EventType {
+/**
+ * @engineInternal Since v3.7.2, this is an engine private enum type.
+ * @deprecated Since v3.7.2, will be removed in the future.
+ */
+export enum DragonBonesEventType {
     Frame = 0,
     Sound = 1
 }
+// To keep the compatibilty
+export const EventType = DragonBonesEventType;
 
+/**
+ * @engineInternal Since v3.7.2, this is an engine private enum type.
+ * @deprecated Since v3.7.2, will be removed in the future.
+ */
 export enum AnimationFadeOutMode {
     None = 0,
     SameLayer = 1,
@@ -28,8 +65,7 @@ export * from './ArmatureDisplay';
 export * from './AttachUtil';
 export * from './assembler';
 
-declare const window: any;
-const dragonBones = window.dragonBones;
+const dragonBones = globalThis.dragonBones;
 
 export const Slot = dragonBones.Slot;
 export const Matrix = dragonBones.Matrix;

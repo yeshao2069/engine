@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,21 +20,16 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-
-/**
- * @packageDocumentation
- * @module decorator
- */
+*/
 
 import { DEV } from 'internal:constants';
-import { js } from '../../utils/js';
+import { getSuper, mixin, getClassName } from '../../utils/js-typed';
 import { CCClass } from '../class';
 import { doValidateMethodWithProps_DEV } from '../utils/preprocess-class';
 import { CACHE_KEY, makeSmartClassDecorator } from './utils';
 
 /**
- * @en Declare a standard class as a CCClass, please refer to the [document](https://docs.cocos.com/creator3d/manual/zh/scripting/ccclass.html)
+ * @en Declare a standard class as a CCClass, please refer to the [document](https://docs.cocos.com/creator3d/manual/en/scripting/ccclass.html)
  * @zh 将标准写法的类声明为 CC 类，具体用法请参阅[类型定义](https://docs.cocos.com/creator3d/manual/zh/scripting/ccclass.html)。
  * @param name - The class name used for serialization.
  * @example
@@ -57,7 +51,7 @@ import { CACHE_KEY, makeSmartClassDecorator } from './utils';
  * ```
  */
 export const ccclass: ((name?: string) => ClassDecorator) & ClassDecorator = makeSmartClassDecorator<string>((constructor, name) => {
-    let base = js.getSuper(constructor);
+    let base = getSuper(constructor);
     if (base === Object) {
         base = null;
     }
@@ -72,7 +66,7 @@ export const ccclass: ((name?: string) => ClassDecorator) & ClassDecorator = mak
         const decoratedProto = cache.proto;
         if (decoratedProto) {
             // decoratedProto.properties = createProperties(ctor, decoratedProto.properties);
-            js.mixin(proto, decoratedProto);
+            mixin(proto, decoratedProto);
         }
         constructor[CACHE_KEY] = undefined;
     }
@@ -88,7 +82,7 @@ export const ccclass: ((name?: string) => ClassDecorator) & ClassDecorator = mak
                 const desc = Object.getOwnPropertyDescriptor(constructor.prototype, prop);
                 const func = desc && desc.value;
                 if (typeof func === 'function') {
-                    doValidateMethodWithProps_DEV(func, prop, js.getClassName(constructor), constructor, base);
+                    doValidateMethodWithProps_DEV(func, prop, getClassName(constructor), constructor, base);
                 }
             }
         }

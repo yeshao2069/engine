@@ -1,6 +1,8 @@
 'use strict';
 
-exports.template = `
+const { updateElementReadonly, updateElementInvalid } = require('../utils/assets');
+
+exports.template = /* html */`
 <div class="asset-sprite-frame">
     <div class="content">
         <ui-prop>
@@ -13,7 +15,7 @@ exports.template = `
         </ui-prop>
         <ui-prop>
             <ui-label slot="label" value="i18n:ENGINE.assets.spriteFrame.offsetX" tooltip="i18n:ENGINE.assets.spriteFrame.offsetXTip"></ui-label>
-            <ui-num-input slot="content" disabled class="offsetX-input"></ui-num-input>
+            <ui-num-input slot="content" disabled class="offsetX-input" step="1"></ui-num-input>
         </ui-prop>
         <ui-prop>
             <ui-label slot="label" value="i18n:ENGINE.assets.spriteFrame.offsetY" tooltip="i18n:ENGINE.assets.spriteFrame.offsetYTip"></ui-label>
@@ -25,11 +27,11 @@ exports.template = `
         </ui-prop>
         <ui-prop>
             <ui-label slot="label" value="i18n:ENGINE.assets.spriteFrame.trimThreshold" tooltip="i18n:ENGINE.assets.spriteFrame.trimThresholdTip"></ui-label>
-            <ui-num-input slot="content" class="trimThreshold-input"></ui-num-input>
+            <ui-num-input slot="content" class="trimThreshold-input" step="1"></ui-num-input>
         </ui-prop>
         <ui-prop>
             <ui-label slot="label" value="i18n:ENGINE.assets.spriteFrame.trimX" tooltip="i18n:ENGINE.assets.spriteFrame.trimXTip"></ui-label>
-            <ui-num-input slot="content" class="trimX-input"></ui-num-input>
+            <ui-num-input slot="content" class="trimX-input" step="1"></ui-num-input>
         </ui-prop>
         <ui-prop>
             <ui-label slot="label" value="i18n:ENGINE.assets.spriteFrame.trimY" tooltip="i18n:ENGINE.assets.spriteFrame.trimYTip"></ui-label>
@@ -37,53 +39,76 @@ exports.template = `
         </ui-prop>
         <ui-prop>
             <ui-label slot="label" value="i18n:ENGINE.assets.spriteFrame.width" tooltip="i18n:ENGINE.assets.spriteFrame.widthTip"></ui-label>
-            <ui-num-input slot="content" class="width-input"></ui-num-input>
+            <ui-num-input slot="content" class="width-input" step="1"></ui-num-input>
         </ui-prop>
         <ui-prop>
             <ui-label slot="label" value="i18n:ENGINE.assets.spriteFrame.height" tooltip="i18n:ENGINE.assets.spriteFrame.heightTip"></ui-label>
-            <ui-num-input slot="content" class="height-input"></ui-num-input>
+            <ui-num-input slot="content" class="height-input"step="1"></ui-num-input>
         </ui-prop>
+        <ui-section expand>
+            <ui-label slot="header" value="Mesh Options"></ui-label>
+                <div class="mesh">
+                    <ui-prop>
+                        <ui-label slot="label" value="i18n:ENGINE.assets.spriteFrame.meshType" tooltip="i18n:ENGINE.assets.spriteFrame.meshTypeTip"></ui-label>
+                        <ui-select slot="content" class="meshType-select"></ui-select>
+                    </ui-prop>
+                    <ui-prop>
+                        <ui-label slot="label" value="i18n:ENGINE.assets.spriteFrame.pixelsToUnit" tooltip="i18n:ENGINE.assets.spriteFrame.pixelsToUnitTip"></ui-label>
+                        <ui-num-input slot="content" class="pixelsToUnit-input" min="0" step="1"></ui-num-input>
+                    </ui-prop>
+                    <ui-prop>
+                        <ui-label slot="label" value="i18n:ENGINE.assets.spriteFrame.pivotX" tooltip="i18n:ENGINE.assets.spriteFrame.pivotXTip"></ui-label>
+                        <ui-num-input slot="content" class="pivotX-input"></ui-num-input>
+                    </ui-prop>
+                    <ui-prop>
+                        <ui-label slot="label" value="i18n:ENGINE.assets.spriteFrame.pivotY" tooltip="i18n:ENGINE.assets.spriteFrame.pivotYTip"></ui-label>
+                        <ui-num-input slot="content" class="pivotY-input"></ui-num-input>
+                    </ui-prop>
+                </div>
+            </ui-section>
         <ui-prop>
             <ui-label slot="label" value="i18n:ENGINE.assets.spriteFrame.borderTop" tooltip="i18n:ENGINE.assets.spriteFrame.borderTopTip"></ui-label>
-            <ui-num-input slot="content" class="borderTop-input" min="0"></ui-num-input>
+            <ui-num-input slot="content" class="borderTop-input" min="0" step="1"></ui-num-input>
         </ui-prop>
         <ui-prop>
             <ui-label slot="label" value="i18n:ENGINE.assets.spriteFrame.borderBottom" tooltip="i18n:ENGINE.assets.spriteFrame.borderBottomTip"></ui-label>
-            <ui-num-input slot="content" class="borderBottom-input" min="0"></ui-num-input>
+            <ui-num-input slot="content" class="borderBottom-input" min="0"step="1"></ui-num-input>
         </ui-prop>
         <ui-prop>
             <ui-label slot="label" value="i18n:ENGINE.assets.spriteFrame.borderLeft" tooltip="i18n:ENGINE.assets.spriteFrame.borderLeftTip"></ui-label>
-            <ui-num-input slot="content" class="borderLeft-input" min="0"></ui-num-input>
+            <ui-num-input slot="content" class="borderLeft-input" min="0" step="1"></ui-num-input>
         </ui-prop>
         <ui-prop>
             <ui-label slot="label" value="i18n:ENGINE.assets.spriteFrame.borderRight" tooltip="i18n:ENGINE.assets.spriteFrame.borderRightTip"></ui-label>
-            <ui-num-input slot="content" class="borderRight-input" min="0"></ui-num-input>
+            <ui-num-input slot="content" class="borderRight-input" min="0" step="1"></ui-num-input>
         </ui-prop>
-        <ui-prop class="edit-row">
-            <ui-button tabindex="0" class="edit-button">
+        <div class="edit-row">
+            <ui-button tabindex="0" class="edit-button" size="medium">
                 <ui-label value="i18n:ENGINE.assets.spriteFrame.edit"></ui-label>
             </ui-button>
-        </ui-prop>
+        </div>
     </div>
 </div>
 `;
 
-exports.style = `
-    .asset-sprite-frame { 
+exports.style = /* css */`
+    .asset-sprite-frame {
         display: flex;
         flex: 1;
         flex-direction: column;
+        padding-right: 4px;
+
      }
-    .asset-sprite-frame > .content {  
-        padding-bottom: 15px;
+    .asset-sprite-frame > .content {
         flex: 1;
-    }
-    .asset-sprite-frame > .content > ui-prop {
-        margin: 4px 0;
     }
     .asset-sprite-frame > .content > .edit-row {
         text-align: center;
-        margin-top: 10px;
+        margin-top: 16px;
+        margin-bottom: 16px;
+    }
+    .asset-sprite-frame > .content > .edit-row > .edit-button {
+        padding: 0 24px;
     }
 `;
 
@@ -104,11 +129,13 @@ exports.$ = {
     borderLeftInput: '.borderLeft-input',
     borderRightInput: '.borderRight-input',
     editButton: '.edit-button',
+    pixelsToUnitInput: '.pixelsToUnit-input',
+    pivotXInput: '.pivotX-input',
+    pivotYInput: '.pivotY-input',
+    meshTypeSelect: '.meshType-select',
 };
 
-/**
- * attribute corresponds to the edit element
- */
+
 const Elements = {
     packable: {
         ready() {
@@ -120,14 +147,18 @@ const Elements = {
                 });
                 panel.dispatch('change');
             });
+
+            panel.$.packableCheckbox.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
+            });
         },
         update() {
             const panel = this;
 
             panel.$.packableCheckbox.value = panel.meta.userData.packable;
 
-            panel.updateInvalid(panel.$.packableCheckbox, 'packable');
-            panel.updateReadonly(panel.$.packableCheckbox);
+            updateElementInvalid.call(panel, panel.$.packableCheckbox, 'packable');
+            updateElementReadonly.call(panel, panel.$.packableCheckbox);
         },
     },
     rotated: {
@@ -140,13 +171,18 @@ const Elements = {
                 });
                 panel.dispatch('change');
             });
+
+            panel.$.rotatedCheckbox.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
+            });
         },
         update() {
             const panel = this;
 
             panel.$.rotatedCheckbox.value = panel.meta.userData.rotated;
 
-            panel.updateInvalid(panel.$.rotatedCheckbox, 'rotated');
+            updateElementInvalid.call(panel, panel.$.rotatedCheckbox, 'rotated');
+            updateElementReadonly.call(panel, panel.$.rotatedCheckbox);
         },
     },
     offsetX: {
@@ -159,13 +195,18 @@ const Elements = {
                 });
                 panel.dispatch('change');
             });
+
+            panel.$.offsetXInput.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
+            });
         },
         update() {
             const panel = this;
 
             panel.$.offsetXInput.value = panel.meta.userData.offsetX;
 
-            panel.updateInvalid(panel.$.offsetXInput, 'offsetX');
+            updateElementInvalid.call(panel, panel.$.offsetXInput, 'offsetX');
+            updateElementReadonly.call(panel, panel.$.offsetXInput);
         },
     },
     offsetY: {
@@ -178,13 +219,18 @@ const Elements = {
                 });
                 panel.dispatch('change');
             });
+
+            panel.$.offsetYInput.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
+            });
         },
         update() {
             const panel = this;
 
             panel.$.offsetYInput.value = panel.meta.userData.offsetY;
 
-            panel.updateInvalid(panel.$.offsetXInput, 'offsetY');
+            updateElementInvalid.call(panel, panel.$.offsetYInput, 'offsetY');
+            updateElementReadonly.call(panel, panel.$.offsetYInput);
         },
     },
     trimType: {
@@ -205,6 +251,10 @@ const Elements = {
                     }
                 }
             });
+
+            panel.$.trimTypeSelect.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
+            });
         },
         update() {
             const panel = this;
@@ -218,8 +268,8 @@ const Elements = {
 
             panel.$.trimTypeSelect.value = panel.meta.userData.trimType;
 
-            panel.updateInvalid(panel.$.trimTypeSelect, 'trimType');
-            panel.updateReadonly(panel.$.trimTypeSelect);
+            updateElementInvalid.call(panel, panel.$.trimTypeSelect, 'trimType');
+            updateElementReadonly.call(panel, panel.$.trimTypeSelect);
         },
     },
     trimThreshold: {
@@ -232,14 +282,18 @@ const Elements = {
                 });
                 panel.dispatch('change');
             });
+
+            panel.$.trimThresholdInput.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
+            });
         },
         update() {
             const panel = this;
 
             panel.$.trimThresholdInput.value = panel.meta.userData.trimThreshold;
 
-            panel.updateInvalid(panel.$.trimThresholdInput, 'trimThreshold');
-            panel.updateReadonly(panel.$.trimThresholdInput);
+            updateElementInvalid.call(panel, panel.$.trimThresholdInput, 'trimThreshold');
+            updateElementReadonly.call(panel, panel.$.trimThresholdInput);
         },
     },
     trimX: {
@@ -252,13 +306,17 @@ const Elements = {
                 });
                 panel.dispatch('change');
             });
+
+            panel.$.trimXInput.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
+            });
         },
         update() {
             const panel = this;
 
             panel.$.trimXInput.value = panel.meta.userData.trimX;
 
-            panel.updateInvalid(panel.$.trimXInput, 'trimX');
+            updateElementInvalid.call(panel, panel.$.trimXInput, 'trimX');
             panel.updateReadonlyCustom(panel.$.trimXInput);
         },
     },
@@ -272,13 +330,17 @@ const Elements = {
                 });
                 panel.dispatch('change');
             });
+
+            panel.$.trimYInput.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
+            });
         },
         update() {
             const panel = this;
 
             panel.$.trimYInput.value = panel.meta.userData.trimY;
 
-            panel.updateInvalid(panel.$.trimYInput, 'trimY');
+            updateElementInvalid.call(panel, panel.$.trimYInput, 'trimY');
             panel.updateReadonlyCustom(panel.$.trimYInput);
         },
     },
@@ -292,13 +354,17 @@ const Elements = {
                 });
                 panel.dispatch('change');
             });
+
+            panel.$.widthInput.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
+            });
         },
         update() {
             const panel = this;
 
             panel.$.widthInput.value = panel.meta.userData.width;
 
-            panel.updateInvalid(panel.$.widthInput, 'width');
+            updateElementInvalid.call(panel, panel.$.widthInput, 'width');
             panel.updateReadonlyCustom(panel.$.widthInput);
         },
     },
@@ -312,13 +378,17 @@ const Elements = {
                 });
                 panel.dispatch('change');
             });
+
+            panel.$.heightInput.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
+            });
         },
         update() {
             const panel = this;
 
             panel.$.heightInput.value = panel.meta.userData.height;
 
-            panel.updateInvalid(panel.$.heightInput, 'height');
+            updateElementInvalid.call(panel, panel.$.heightInput, 'height');
             panel.updateReadonlyCustom(panel.$.heightInput);
         },
     },
@@ -331,6 +401,11 @@ const Elements = {
                     meta.userData.borderTop = event.target.value;
                 });
                 panel.dispatch('change');
+                Editor.Message.send('inspector', 'sprite-keys', panel.meta);
+            });
+
+            panel.$.borderTopInput.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
             });
         },
         update() {
@@ -338,8 +413,8 @@ const Elements = {
 
             panel.$.borderTopInput.value = panel.meta.userData.borderTop;
 
-            panel.updateInvalid(panel.$.borderTopInput, 'borderTop');
-            panel.updateReadonly(panel.$.borderTopInput);
+            updateElementInvalid.call(panel, panel.$.borderTopInput, 'borderTop');
+            updateElementReadonly.call(panel, panel.$.borderTopInput);
 
             panel.$.borderTopInput.setAttribute('max', this.meta.userData.height - this.meta.userData.borderBottom);
         },
@@ -353,6 +428,11 @@ const Elements = {
                     meta.userData.borderBottom = event.target.value;
                 });
                 panel.dispatch('change');
+                Editor.Message.send('inspector', 'sprite-keys', panel.meta);
+            });
+
+            panel.$.borderBottomInput.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
             });
         },
         update() {
@@ -360,8 +440,8 @@ const Elements = {
 
             panel.$.borderBottomInput.value = panel.meta.userData.borderBottom;
 
-            panel.updateInvalid(panel.$.borderBottomInput, 'borderBottom');
-            panel.updateReadonly(panel.$.borderBottomInput);
+            updateElementInvalid.call(panel, panel.$.borderBottomInput, 'borderBottom');
+            updateElementReadonly.call(panel, panel.$.borderBottomInput);
 
             panel.$.borderBottomInput.setAttribute('max', this.meta.userData.height - this.meta.userData.borderTop);
         },
@@ -375,6 +455,11 @@ const Elements = {
                     meta.userData.borderLeft = event.target.value;
                 });
                 panel.dispatch('change');
+                Editor.Message.send('inspector', 'sprite-keys', panel.meta);
+            });
+
+            panel.$.borderLeftInput.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
             });
         },
         update() {
@@ -382,8 +467,8 @@ const Elements = {
 
             panel.$.borderLeftInput.value = panel.meta.userData.borderLeft;
 
-            panel.updateInvalid(panel.$.borderLeftInput, 'borderLeft');
-            panel.updateReadonly(panel.$.borderLeftInput);
+            updateElementInvalid.call(panel, panel.$.borderLeftInput, 'borderLeft');
+            updateElementReadonly.call(panel, panel.$.borderLeftInput);
 
             panel.$.borderLeftInput.setAttribute('max', this.meta.userData.width - this.meta.userData.borderRight);
         },
@@ -397,6 +482,11 @@ const Elements = {
                     meta.userData.borderRight = event.target.value;
                 });
                 panel.dispatch('change');
+                Editor.Message.send('inspector', 'sprite-keys', panel.meta);
+            });
+
+            panel.$.borderRightInput.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
             });
         },
         update() {
@@ -404,8 +494,8 @@ const Elements = {
 
             panel.$.borderRightInput.value = panel.meta.userData.borderRight;
 
-            panel.updateInvalid(panel.$.borderRightInput, 'borderRight');
-            panel.updateReadonly(panel.$.borderRightInput);
+            updateElementInvalid.call(panel, panel.$.borderRightInput, 'borderRight');
+            updateElementReadonly.call(panel, panel.$.borderRightInput);
 
             panel.$.borderRightInput.setAttribute('max', this.meta.userData.width - this.meta.userData.borderLeft);
         },
@@ -428,13 +518,18 @@ const Elements = {
         },
         update() {
             const panel = this;
-            
-            panel.updateReadonly(panel.$.editButton);
+
+            updateElementReadonly.call(panel, panel.$.editButton);
 
             if (panel.assetList.length > 1) {
                 panel.$.editButton.style.display = 'none';
             } else {
-                panel.$.editButton.style.display = 'inline-block';
+                panel.$.editButton.style.display = ''; // depends on component itself
+            }
+
+            if (panel.uuidInSpriteEditor !== panel.meta.uuid) {
+                panel.uuidInSpriteEditor = panel.meta.uuid;
+                Editor.Message.send('inspector', 'sprite-keys', panel.meta);
             }
         },
         close() {
@@ -443,79 +538,121 @@ const Elements = {
             Editor.Message.removeBroadcastListener('sprite-editor:changed', panel.updateFromBroadcastBind);
         },
     },
-};
+    pixelsToUnit: {
+        ready() {
+            const panel = this;
 
-/**
- * Methods for automatic rendering of components
- * @param assetList
- * @param metaList
- */
-exports.update = function (assetList, metaList) {
-    this.assetList = assetList;
-    this.metaList = metaList;
-    this.asset = assetList[0];
-    this.meta = metaList[0];
+            panel.$.pixelsToUnitInput.addEventListener('change', (event) => {
+                panel.metaList.forEach((meta) => {
+                    meta.userData.pixelsToUnit = event.target.value;
+                });
+                panel.dispatch('change');
+                Editor.Message.send('inspector', 'sprite-keys', panel.meta);
+            });
 
-    for (const prop in Elements) {
-        const element = Elements[prop];
-        if (element.update) {
-            element.update.call(this);
-        }
-    }
-};
+            panel.$.pixelsToUnitInput.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
+            });
+        },
+        update() {
+            const panel = this;
 
-/**
- * Method of initializing the panel
- */
-exports.ready = function () {
-    for (const prop in Elements) {
-        const element = Elements[prop];
-        if (element.ready) {
-            element.ready.call(this);
-        }
-    }
-};
+            panel.$.pixelsToUnitInput.value = panel.meta.userData.pixelsToUnit;
 
-exports.close = function () {
-    for (const prop in Elements) {
-        const element = Elements[prop];
-        if (element.close) {
-            element.close.call(this);
-        }
-    }
+            updateElementInvalid.call(panel, panel.$.pixelsToUnitInput, 'pixelsToUnit');
+            updateElementReadonly.call(panel, panel.$.pixelsToUnitInput);
+        },
+    },
+    pivotX: {
+        ready() {
+            const panel = this;
+
+            panel.$.pivotXInput.addEventListener('change', (event) => {
+                panel.metaList.forEach((meta) => {
+                    meta.userData.pivotX = event.target.value;
+                });
+                panel.dispatch('change');
+            });
+
+            panel.$.pivotXInput.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
+            });
+        },
+        update() {
+            const panel = this;
+
+            panel.$.pivotXInput.value = panel.meta.userData.pivotX;
+
+            updateElementInvalid.call(panel, panel.$.pivotXInput, 'pivotX');
+            updateElementReadonly.call(panel, panel.$.pivotXInput);
+        },
+    },
+    pivotY: {
+        ready() {
+            const panel = this;
+
+            panel.$.pivotYInput.addEventListener('change', (event) => {
+                panel.metaList.forEach((meta) => {
+                    meta.userData.pivotY = event.target.value;
+                });
+                panel.dispatch('change');
+            });
+
+            panel.$.pivotYInput.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
+            });
+        },
+        update() {
+            const panel = this;
+
+            panel.$.pivotYInput.value = panel.meta.userData.pivotY;
+
+            updateElementInvalid.call(panel, panel.$.pivotYInput, 'pivotY');
+            updateElementReadonly.call(panel, panel.$.pivotYInput);
+        },
+    },
+    meshType: {
+        ready() {
+            const panel = this;
+
+            panel.$.meshTypeSelect.addEventListener('change', (event) => {
+                panel.metaList.forEach((meta) => {
+                    meta.userData.meshType = Number(event.target.value);
+                });
+                panel.dispatch('change');
+            });
+
+            panel.$.meshTypeSelect.addEventListener('confirm', () => {
+                panel.dispatch('snapshot');
+            });
+        },
+        update() {
+            const panel = this;
+
+            let optionsHtml = '';
+            // const types = ['rect', 'polygon']; // polygon is not ready
+            const types = ['rect'];
+            types.forEach((name, index) => {
+                optionsHtml += `<option value="${index}">${name}</option>`;
+            });
+            panel.$.meshTypeSelect.innerHTML = optionsHtml;
+
+            panel.$.meshTypeSelect.value = panel.meta.userData.meshType;
+
+            updateElementInvalid.call(panel, panel.$.meshTypeSelect, 'meshType');
+            updateElementReadonly.call(panel, panel.$.meshTypeSelect);
+        },
+    },
 };
 
 exports.methods = {
-    /**
-     * Update whether a data is editable in multi-select state
-     */
-    updateInvalid(element, prop) {
-        const invalid = this.metaList.some((meta) => {
-            return meta.userData[prop] !== this.meta.userData[prop];
-        });
-        element.invalid = invalid;
-    },
-    /**
-     * Update read-only status
-     */
-    updateReadonly(element) {
-        if (this.asset.readonly) {
-            element.setAttribute('disabled', true);
-        } else {
-            element.removeAttribute('disabled');
-        }
-    },
     /**
      * Update the business-related read-only state
      */
     updateReadonlyCustom(element) {
         const isCustom = this.meta.userData.trimType === 'custom';
 
-        if (!isCustom || this.asset.readonly) {
-            element.setAttribute('disabled', true);
-        } else {
-            element.removeAttribute('disabled');
-        }
+        updateElementReadonly.call(this, element, !isCustom || this.asset.readonly);
     },
     /**
      * Data updates from the Kyushu edit panel
@@ -530,6 +667,7 @@ exports.methods = {
                 });
             }
             panel.dispatch('change');
+            panel.dispatch('snapshot');
         }
 
         for (const prop in Elements) {
@@ -539,4 +677,36 @@ exports.methods = {
             }
         }
     },
+};
+
+exports.ready = function() {
+    for (const prop in Elements) {
+        const element = Elements[prop];
+        if (element.ready) {
+            element.ready.call(this);
+        }
+    }
+};
+
+exports.update = function(assetList, metaList) {
+    this.assetList = assetList;
+    this.metaList = metaList;
+    this.asset = assetList[0];
+    this.meta = metaList[0];
+
+    for (const prop in Elements) {
+        const element = Elements[prop];
+        if (element.update) {
+            element.update.call(this);
+        }
+    }
+};
+
+exports.close = function() {
+    for (const prop in Elements) {
+        const element = Elements[prop];
+        if (element.close) {
+            element.close.call(this);
+        }
+    }
 };

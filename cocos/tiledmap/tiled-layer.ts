@@ -1,20 +1,19 @@
 /* eslint-disable default-case */
 /*
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,35 +22,40 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-
-/**
- * @packageDocumentation
- * @module tiledmap
- */
+*/
 
 import { ccclass } from 'cc.decorator';
 
-import { EDITOR } from 'internal:constants';
-import { Renderable2D } from '../2d/framework/renderable-2d';
+import { EDITOR_NOT_IN_PREVIEW } from 'internal:constants';
+import { UIRenderer } from '../2d/framework/ui-renderer';
 import { SpriteFrame } from '../2d/assets/sprite-frame';
-import { Component } from '../core/components';
+import { Component, Node } from '../scene-graph';
 import { TMXMapInfo } from './tmx-xml-parser';
-import { Color, IVec2Like, Mat4, Size, SystemEventType, Texture2D, Vec2, Vec3, Node, warn, logID, CCBoolean, director } from '../core';
+import { Color, IVec2Like, Mat4, Size, Vec2, Vec3, logID, warnID } from '../core';
 import { TiledTile } from './tiled-tile';
-import { MeshRenderData } from '../2d/renderer/render-data';
-import { Batcher2D } from '../2d/renderer/batcher-2d';
+import { RenderData } from '../2d/renderer/render-data';
+import { IBatcher } from '../2d/renderer/i-batcher';
 import {
     MixedGID, GID, Orientation, TiledTextureGrids, TMXTilesetInfo, RenderOrder, StaggerAxis, StaggerIndex, TileFlag,
-    GIDFlags, TiledGrid, TiledAnimationType, PropertiesInfo, TMXLayerInfo,
+    GIDFlags, TiledAnimationType, PropertiesInfo, TMXLayerInfo,
 } from './tiled-types';
-import { fillTextureGrids, loadAllTextures } from './tiled-utils';
+import { fillTextureGrids } from './tiled-utils';
+import { NodeEventType } from '../scene-graph/node-event';
+import { RenderEntity, RenderEntityType } from '../2d/renderer/render-entity';
+import { RenderDrawInfo, RenderDrawInfoType } from '../2d/renderer/render-draw-info';
+import { Texture2D } from '../asset/assets';
+import { director } from '../game';
+import { Camera } from '../render-scene/scene';
 
 const _mat4_temp = new Mat4();
 const _vec2_temp = new Vec2();
 const _vec3_temp = new Vec3();
 const _vec3_temp2 = new Vec3();
 const _tempRowCol = { row: 0, col: 0 };
+
+function isTiledSubNodeData (data: TiledRenderData | TiledSubNodeData): data is TiledSubNodeData {
+    return 'subNodes' in data;
+}
 
 @ccclass('cc.TiledUserNodeData')
 export class TiledUserNodeData extends Component {
@@ -64,8 +68,8 @@ export class TiledUserNodeData extends Component {
     }
 }
 
-export interface TiledMeshData {
-    renderData: MeshRenderData;
+export interface TiledRenderData {
+    renderData: RenderData | null;
     texture: Texture2D | null;
 }
 
@@ -73,18 +77,29 @@ interface TiledSubNodeData {
     subNodes: (null | TiledUserNodeData)[];
 }
 
-type TiledMeshDataArray = (TiledMeshData | TiledSubNodeData)[];
+type TiledDataArray = (TiledRenderData | TiledSubNodeData)[];
+
+export interface ITiledLayerCullingRect {
+    leftDown: {
+        row: number;
+        col: number;
+    };
+    rightTop: {
+        row: number;
+        col: number;
+    };
+}
 
 /**
- * @en Render the TMX layer.
- * @zh 渲染 TMX layer。
- * @class TiledLayer
- * @extends Component
- */
+  * @en Render the TMX layer.
+  * @zh 渲染 TMX layer。
+  * @class TiledLayer
+  * @extends Component
+  */
 @ccclass('cc.TiledLayer')
-export class TiledLayer extends Renderable2D {
+export class TiledLayer extends UIRenderer {
     // [row][col] = {count: 0, nodesList: []};
-    protected _userNodeGrid: { [key: number]: { count: number;[key: number]: { count: number, list: (TiledUserNodeData | null)[] } } } = {};
+    protected _userNodeGrid: SafeRecord<number, { count: number; } & SafeRecord<number, { count: number, list: (TiledUserNodeData | null)[] } >> = {};
     protected _userNodeMap: { [key: string]: TiledUserNodeData } = {};// [id] = node;
     protected _userNodeDirty = false;
 
@@ -97,15 +112,20 @@ export class TiledLayer extends Renderable2D {
     // _tilesetIndexToArrIndex: { [key: number]: number } = {};
 
     protected _viewPort = { x: -1, y: -1, width: -1, height: -1 };
-    protected _cullingRect = {
+    protected _cullingRect: ITiledLayerCullingRect = {
         leftDown: { row: -1, col: -1 },
         rightTop: { row: -1, col: -1 },
     };
-    get cullingRect () { return this._cullingRect; }
+    get cullingRect (): ITiledLayerCullingRect {
+        return this._cullingRect;
+    }
 
     protected _cullingDirty = true;
     protected _rightTop = { row: -1, col: -1 };
-    get rightTop () { return this._rightTop; }
+    get rightTop (): {
+        row: number;
+        col: number;
+        } { return this._rightTop; }
 
     protected _layerInfo: TMXLayerInfo | null = null;
     protected _mapInfo: TMXMapInfo | null = null;
@@ -121,14 +141,14 @@ export class TiledLayer extends Renderable2D {
     public tiles: MixedGID[] = [];
 
     // vertex array
-    public vertices: { minCol: number, maxCol: number, [key: number]: { left: number, bottom: number, index: number } }[] = [];
+    public vertices: SafeArray<{ minCol: number, maxCol: number } & SafeRecord<number, { left: number, bottom: number, index: number }>> = [];
     // vertices dirty
     protected _verticesDirty = true;
 
     protected _layerName = '';
     protected _layerSize?: Size;
 
-    get layerSize () { return this._layerSize!; }
+    get layerSize (): Size { return this._layerSize!; }
 
     protected _minGID?: GID;
     protected _maxGID?: GID;
@@ -169,56 +189,66 @@ export class TiledLayer extends Renderable2D {
     protected _vertexZvalue?: number;
     protected _offset?: Vec2;
 
-    protected _meshRenderDataArray: TiledMeshDataArray | null = null;
+    protected _tiledDataArray: TiledDataArray = [];
 
-    get meshRenderDataArray () { return this._meshRenderDataArray; }
-    get leftDownToCenterX () { return this._leftDownToCenterX; }
-    get leftDownToCenterY () { return this._leftDownToCenterY; }
+    protected _cameraNode?: Node;
+
+    get tiledDataArray (): TiledDataArray { return this._tiledDataArray; }
+    get leftDownToCenterX (): number { return this._leftDownToCenterX; }
+    get leftDownToCenterY (): number { return this._leftDownToCenterY; }
+
+    private _drawInfoList: RenderDrawInfo[] = [];
+    private requestDrawInfo (idx: number): RenderDrawInfo {
+        if (!this._drawInfoList[idx]) {
+            this._drawInfoList[idx] = new RenderDrawInfo();
+            this._drawInfoList[idx].setDrawInfoType(RenderDrawInfoType.MIDDLEWARE);
+        }
+        return this._drawInfoList[idx];
+    }
 
     constructor () {
         super();
     }
 
-    public hasTiledNode () {
+    public hasTiledNode (): boolean {
         return this._hasTiledNodeGrid;
     }
 
-    public hasAnimation () {
+    public hasAnimation (): boolean {
         return this._hasAniGrid;
     }
 
     /**
-     * @en enable or disable culling
-     * @zh 开启或关闭裁剪。
-     * @method enableCulling
-     * @param value
-     */
+      * @en enable or disable culling
+      * @zh 开启或关闭裁剪。
+      * @method enableCulling
+      * @param value
+      */
     set enableCulling (value: boolean) {
         if (this._enableCulling !== value) {
             this._enableCulling = value;
             this._cullingDirty = true;
-            this.markForUpdateRenderData();
+            this._markForUpdateRenderData();
         }
     }
-    get enableCulling () { return this._enableCulling!; }
+    get enableCulling (): boolean { return this._enableCulling!; }
 
     /**
-     * @en Adds user's node into layer.
-     * @zh 添加用户节点。
-     * @method addUserNode
-     * @param {cc.Node} node
-     * @return {Boolean}
-     */
-    public addUserNode (node: Node) {
+      * @en Adds user's node into layer.
+      * @zh 添加用户节点。
+      * @method addUserNode
+      * @param {cc.Node} node
+      * @return {Boolean}
+      */
+    public addUserNode (node: Node): boolean {
         let dataComp = node.getComponent(TiledUserNodeData);
         if (dataComp) {
-            warn('CCTiledLayer:addUserNode node has been added');
+            warnID(7242);
             return false;
         }
 
         dataComp = node.addComponent(TiledUserNodeData);
         node.parent = this.node;
-        // node._renderFlag |= RenderFlow.FLAG_BREAK_FLOW;
         this._userNodeMap[node.uuid] = dataComp;
 
         dataComp._row = -1;
@@ -229,26 +259,26 @@ export class TiledLayer extends Renderable2D {
         this._positionToRowCol(_vec2_temp.x, _vec2_temp.y, _tempRowCol);
         this._addUserNodeToGrid(dataComp, _tempRowCol);
         this._updateCullingOffsetByUserNode(node);
-        node.on(SystemEventType.TRANSFORM_CHANGED, this._userNodePosChange, dataComp);
-        node.on(SystemEventType.SIZE_CHANGED, this._userNodeSizeChange, dataComp);
+        node.on(NodeEventType.TRANSFORM_CHANGED, this._userNodePosChange, dataComp);
+        node.on(NodeEventType.SIZE_CHANGED, this._userNodeSizeChange, dataComp);
         return true;
     }
 
     /**
-     * @en Removes user's node.
-     * @zh 移除用户节点。
-     * @method removeUserNode
-     * @param {cc.Node} node
-     * @return {Boolean}
-     */
-    public removeUserNode (node: Node) {
+      * @en Removes user's node.
+      * @zh 移除用户节点。
+      * @method removeUserNode
+      * @param {cc.Node} node
+      * @return {Boolean}
+      */
+    public removeUserNode (node: Node): boolean {
         const dataComp = node.getComponent(TiledUserNodeData);
         if (!dataComp) {
-            warn('CCTiledLayer:removeUserNode node is not exist');
+            warnID(7243);
             return false;
         }
-        node.off(SystemEventType.TRANSFORM_CHANGED, this._userNodePosChange, dataComp);
-        node.off(SystemEventType.SIZE_CHANGED, this._userNodeSizeChange, dataComp);
+        node.off(NodeEventType.TRANSFORM_CHANGED, this._userNodePosChange, dataComp);
+        node.off(NodeEventType.SIZE_CHANGED, this._userNodeSizeChange, dataComp);
         this._removeUserNodeFromGrid(dataComp);
         delete this._userNodeMap[node.uuid];
         node._removeComponent(dataComp);
@@ -259,35 +289,38 @@ export class TiledLayer extends Renderable2D {
     }
 
     /**
-     * @en Destroy user's node.
-     * @zh 销毁用户节点。
-     * @method destroyUserNode
-     * @param {cc.Node} node
-     */
-    public destroyUserNode (node: Node) {
+      * @en Destroy user's node.
+      * @zh 销毁用户节点。
+      * @method destroyUserNode
+      * @param {cc.Node} node
+      */
+    public destroyUserNode (node: Node): void {
         this.removeUserNode(node);
         node.destroy();
     }
 
     // acording layer anchor point to calculate node layer pos
-    protected _nodeLocalPosToLayerPos (nodePos: IVec2Like, out: IVec2Like) {
+    protected _nodeLocalPosToLayerPos (nodePos: IVec2Like, out: IVec2Like): void {
         out.x = nodePos.x + this._leftDownToCenterX;
         out.y = nodePos.y + this._leftDownToCenterY;
     }
 
-    public getNodesByRowCol (row: number, col: number) {
+    public getNodesByRowCol (row: number, col: number): {
+        count: number;
+        list: (TiledUserNodeData | null)[];
+    } | null | undefined {
         const rowData = this._userNodeGrid[row];
         if (!rowData) return null;
         return rowData[col];
     }
 
-    public getNodesCountByRow (row) {
+    public getNodesCountByRow (row): number {
         const rowData = this._userNodeGrid[row];
         if (!rowData) return 0;
         return rowData.count;
     }
 
-    protected _updateAllUserNode () {
+    protected _updateAllUserNode (): void {
         this._userNodeGrid = {};
         for (const dataId in this._userNodeMap) {
             const dataComp = this._userNodeMap[dataId];
@@ -298,8 +331,8 @@ export class TiledLayer extends Renderable2D {
         }
     }
 
-    protected _updateCullingOffsetByUserNode (node_: Node) {
-        const node = node_._uiProps.uiTransformComp!.contentSize;
+    protected _updateCullingOffsetByUserNode (node_: Node): void {
+        const node = node_._getUITransformComp()!.contentSize;
         if (this._topOffset < node.height) {
             this._topOffset = node.height;
         }
@@ -314,16 +347,16 @@ export class TiledLayer extends Renderable2D {
         }
     }
 
-    protected _userNodeSizeChange () {
+    protected _userNodeSizeChange (): void {
         const dataComp: TiledUserNodeData = this as unknown as any;
         const node = dataComp.node;
         const self = dataComp._tiledLayer!;
         self._updateCullingOffsetByUserNode(node);
         self._userNodeDirty = true;
-        self.markForUpdateRenderData();
+        self._markForUpdateRenderData();
     }
 
-    protected _userNodePosChange () {
+    protected _userNodePosChange (): void {
         const dataComp: TiledUserNodeData = this as unknown as any;
         const node = dataComp.node;
         const self = dataComp._tiledLayer!;
@@ -337,7 +370,7 @@ export class TiledLayer extends Renderable2D {
         self._addUserNodeToGrid(dataComp, _tempRowCol);
     }
 
-    protected _removeUserNodeFromGrid (dataComp: TiledUserNodeData) {
+    protected _removeUserNodeFromGrid (dataComp: TiledUserNodeData): void {
         const row = dataComp._row;
         const col = dataComp._col;
         const index = dataComp._index;
@@ -358,10 +391,10 @@ export class TiledLayer extends Renderable2D {
         dataComp._col = -1;
         dataComp._index = -1;
         this._userNodeDirty = true;
-        this.markForUpdateRenderData();
+        this._markForUpdateRenderData();
     }
 
-    protected _limitInLayer (rowCol: { row: number, col: number }) {
+    protected _limitInLayer (rowCol: { row: number, col: number }): void {
         const row = rowCol.row;
         const col = rowCol.col;
         if (row < 0) rowCol.row = 0;
@@ -370,7 +403,7 @@ export class TiledLayer extends Renderable2D {
         if (col > this._rightTop.col) rowCol.col = this._rightTop.col;
     }
 
-    protected _addUserNodeToGrid (dataComp: TiledUserNodeData, tempRowCol: { col: number, row: number }) {
+    protected _addUserNodeToGrid (dataComp: TiledUserNodeData, tempRowCol: { col: number, row: number }): void {
         const row = tempRowCol.row;
         const col = tempRowCol.col;
         const rowData = this._userNodeGrid[row] = this._userNodeGrid[row] || { count: 0 };
@@ -382,105 +415,125 @@ export class TiledLayer extends Renderable2D {
         colData.count++;
         colData.list.push(dataComp);
         this._userNodeDirty = true;
+        this._markForUpdateRenderData();
     }
 
-    public isUserNodeDirty () {
+    public isUserNodeDirty (): boolean {
         return this._userNodeDirty;
     }
 
-    public setUserNodeDirty (value) {
+    public setUserNodeDirty (value): void {
         this._userNodeDirty = value;
     }
 
-    onEnable () {
+    protected _reinstallCamera (): Camera | null {
+        const camera = director.root!.batcher2D.getFirstRenderCamera(this.node);
+        const cameraNode = camera?.node;
+        if (this._cameraNode !== cameraNode) {
+            this._uninstallCamera();
+            if (cameraNode) {
+                cameraNode.on(NodeEventType.TRANSFORM_CHANGED, this.updateCulling, this);
+                cameraNode.on(NodeEventType.SIZE_CHANGED, this.updateCulling, this);
+                this._cameraNode = cameraNode;
+            }
+        }
+        return camera;
+    }
+
+    protected _uninstallCamera (): void {
+        if (this._cameraNode) {
+            this._cameraNode.off(NodeEventType.TRANSFORM_CHANGED, this.updateCulling, this);
+            this._cameraNode.off(NodeEventType.SIZE_CHANGED, this.updateCulling, this);
+            delete this._cameraNode;
+        }
+    }
+
+    onEnable (): void {
         super.onEnable();
-        this.node.on(SystemEventType.ANCHOR_CHANGED, this._syncAnchorPoint, this);
-        this.node.on(SystemEventType.TRANSFORM_CHANGED, this.updateCulling, this);
-        this.node.on(SystemEventType.SIZE_CHANGED, this.updateCulling, this);
-        this.node.parent!.on(SystemEventType.TRANSFORM_CHANGED, this.updateCulling, this);
-        this.node.parent!.on(SystemEventType.SIZE_CHANGED, this.updateCulling, this);
-        this.markForUpdateRenderData();
+        this.node.on(NodeEventType.ANCHOR_CHANGED, this._syncAnchorPoint, this);
+        this.node.on(NodeEventType.TRANSFORM_CHANGED, this.updateCulling, this);
+        this.node.on(NodeEventType.SIZE_CHANGED, this.updateCulling, this);
+        this.node.parent!.on(NodeEventType.TRANSFORM_CHANGED, this.updateCulling, this);
+        this.node.parent!.on(NodeEventType.SIZE_CHANGED, this.updateCulling, this);
+        this._markForUpdateRenderData();
         // delay 1 frame, since camera's matrix data is dirty
         this.scheduleOnce(this.updateCulling.bind(this));
     }
 
-    onDisable () {
+    onDisable (): void {
         super.onDisable();
-        this.node.parent!.off(SystemEventType.SIZE_CHANGED, this.updateCulling, this);
-        this.node.parent!.off(SystemEventType.TRANSFORM_CHANGED, this.updateCulling, this);
-        this.node.off(SystemEventType.SIZE_CHANGED, this.updateCulling, this);
-        this.node.off(SystemEventType.TRANSFORM_CHANGED, this.updateCulling, this);
-        this.node.off(SystemEventType.ANCHOR_CHANGED, this._syncAnchorPoint, this);
+        this.node.parent?.off(NodeEventType.SIZE_CHANGED, this.updateCulling, this);
+        this.node.parent?.off(NodeEventType.TRANSFORM_CHANGED, this.updateCulling, this);
+        this.node.off(NodeEventType.SIZE_CHANGED, this.updateCulling, this);
+        this.node.off(NodeEventType.TRANSFORM_CHANGED, this.updateCulling, this);
+        this.node.off(NodeEventType.ANCHOR_CHANGED, this._syncAnchorPoint, this);
+        this._uninstallCamera();
     }
 
-    protected _syncAnchorPoint () {
+    protected _syncAnchorPoint (): void {
         const node = this.node;
-        const trans = node._uiProps.uiTransformComp!;
+        const trans = node._getUITransformComp()!;
         const scale = node.getScale();
         this._leftDownToCenterX = trans.width * trans.anchorX * scale.x;
         this._leftDownToCenterY = trans.height * trans.anchorY * scale.y;
         this._cullingDirty = true;
-        this.markForUpdateRenderData();
-    }
-
-    onDestroy () {
-        super.onDestroy();
+        this._markForUpdateRenderData();
     }
 
     /**
-     * @en Gets the layer name.
-     * @zh 获取层的名称。
-     * @method getLayerName
-     * @return {String}
-     * @example
-     * let layerName = tiledLayer.getLayerName();
-     * cc.log(layerName);
-     */
+      * @en Gets the layer name.
+      * @zh 获取层的名称。
+      * @method getLayerName
+      * @return {String}
+      * @example
+      * let layerName = tiledLayer.getLayerName();
+      * cc.log(layerName);
+      */
     public getLayerName (): string {
         return this._layerName;
     }
 
     /**
-     * @en Set the layer name.
-     * @zh 设置层的名称
-     * @method SetLayerName
-     * @param {String} layerName
-     * @example
-     * tiledLayer.setLayerName("New Layer");
-     */
-    public setLayerName (layerName: string) {
+      * @en Set the layer name.
+      * @zh 设置层的名称
+      * @method setLayerName
+      * @param {String} layerName
+      * @example
+      * tiledLayer.setLayerName("New Layer");
+      */
+    public setLayerName (layerName: string): void {
         this._layerName = layerName;
     }
 
     /**
-     * @en Return the value for the specific property name.
-     * @zh 获取指定属性名的值。
-     * @method getProperty
-     * @param {String} propertyName
-     * @return {*}
-     * @example
-     * let property = tiledLayer.getProperty("info");
-     * cc.log(property);
-     */
-    public getProperty (propertyName: string) {
+      * @en Return the value for the specific property name.
+      * @zh 获取指定属性名的值。
+      * @method getProperty
+      * @param {String} propertyName
+      * @return {*}
+      * @example
+      * let property = tiledLayer.getProperty("info");
+      * cc.log(property);
+      */
+    public getProperty (propertyName: string): string | number {
         return this._properties![propertyName];
     }
 
     /**
-     * @en Returns the position in pixels of a given tile coordinate.
-     * @zh 获取指定 tile 的像素坐标。
-     * @method getPositionAt
-     * @param {Vec2|Number} pos position or x
-     * @param {Number} [y]
-     * @return {Vec2}
-     * @example
-     * let pos = tiledLayer.getPositionAt(cc.v2(0, 0));
-     * cc.log("Pos: " + pos);
-     * let pos = tiledLayer.getPositionAt(0, 0);
-     * cc.log("Pos: " + pos);
-     */
+      * @en Returns the position in pixels of a given tile coordinate.
+      * @zh 获取指定 tile 的像素坐标。
+      * @method getPositionAt
+      * @param {Vec2|Number} pos position or x
+      * @param {Number} [y]
+      * @return {Vec2}
+      * @example
+      * let pos = tiledLayer.getPositionAt(cc.v2(0, 0));
+      * cc.log("Pos: " + pos);
+      * let pos = tiledLayer.getPositionAt(0, 0);
+      * cc.log("Pos: " + pos);
+      */
     public getPositionAt (pos: IVec2Like | number, y?: number): Vec2 | null {
-        let x;
+        let x: number;
         if (y !== undefined) {
             x = Math.floor(pos as number);
             y = Math.floor(y);
@@ -500,7 +553,7 @@ export class TiledLayer extends Renderable2D {
         return null;
     }
 
-    public isInvalidPosition (x: number, y: number) {
+    public isInvalidPosition (x: number, y: number): boolean {
         return x >= this._layerSize!.width || y >= this._layerSize!.height || x < 0 || y < 0;
     }
 
@@ -583,19 +636,19 @@ export class TiledLayer extends Renderable2D {
     }
 
     /**
-     * @en
-     * Sets the tiles gid (gid = tile global id) at a given tiles rect.
-     * @zh
-     * 设置给定区域的 tile 的 gid (gid = tile 全局 id)，
-     * @method setTilesGIDAt
-     * @param {Array} gids an array contains gid
-     * @param {Number} beginCol begin col number
-     * @param {Number} beginRow begin row number
-     * @param {Number} totalCols count of column
-     * @example
-     * tiledLayer.setTilesGIDAt([1, 1, 1, 1], 10, 10, 2)
-     */
-    public setTilesGIDAt (gids: number[], beginCol: number, beginRow: number, totalCols: number) {
+      * @en
+      * Sets the tiles gid (gid = tile global id) at a given tiles rect.
+      * @zh
+      * 设置给定区域的 tile 的 gid (gid = tile 全局 id)，
+      * @method setTilesGIDAt
+      * @param {Array} gids an array contains gid
+      * @param {Number} beginCol begin col number
+      * @param {Number} beginRow begin row number
+      * @param {Number} totalCols count of column
+      * @example
+      * tiledLayer.setTilesGIDAt([1, 1, 1, 1], 10, 10, 2)
+      */
+    public setTilesGIDAt (gids: number[], beginCol: number, beginRow: number, totalCols: number): void {
         if (!gids || gids.length === 0 || totalCols <= 0) return;
         if (beginRow < 0) beginRow = 0;
         if (beginCol < 0) beginCol = 0;
@@ -611,24 +664,24 @@ export class TiledLayer extends Renderable2D {
     }
 
     /**
-     * @en
-     * Sets the tile gid (gid = tile global id) at a given tile coordinate.<br />
-     * The Tile GID can be obtained by using the method "tileGIDAt" or by using the TMX editor . Tileset Mgr +1.<br />
-     * If a tile is already placed at that position, then it will be removed.
-     * @zh
-     * 设置给定坐标的 tile 的 gid (gid = tile 全局 id)，
-     * tile 的 GID 可以使用方法 “tileGIDAt” 来获得。<br />
-     * 如果一个 tile 已经放在那个位置，那么它将被删除。
-     * @method setTileGIDAt
-     * @param {Number} gid
-     * @param {Vec2|Number} posOrX position or x
-     * @param {Number} flagsOrY flags or y
-     * @param {Number} [flags]
-     * @example
-     * tiledLayer.setTileGIDAt(1001, 10, 10, 1)
-     */
-    public setTileGIDAt (gid: MixedGID, x: number, y: number, flags?: number) {
-        const ugid = ((gid as unknown as number) & TileFlag.FLIPPED_MASK) >>> 0;
+      * @en
+      * Sets the tile gid (gid = tile global id) at a given tile coordinate.<br />
+      * The Tile GID can be obtained by using the method "tileGIDAt" or by using the TMX editor . Tileset Mgr +1.<br />
+      * If a tile is already placed at that position, then it will be removed.
+      * @zh
+      * 设置给定坐标的 tile 的 gid (gid = tile 全局 id)，
+      * tile 的 GID 可以使用方法 “tileGIDAt” 来获得。<br />
+      * 如果一个 tile 已经放在那个位置，那么它将被删除。
+      * @method setTileGIDAt
+      * @param {Number} gid
+      * @param {Vec2|Number} posOrX position or x
+      * @param {Number} flagsOrY flags or y
+      * @param {Number} [flags]
+      * @example
+      * tiledLayer.setTileGIDAt(1001, 10, 10, 1)
+      */
+    public setTileGIDAt (gid: MixedGID, x: number, y: number, flags?: number): void {
+        const ugid = (gid & TileFlag.FLIPPED_MASK) >>> 0;
 
         x = Math.floor(x);
         y = Math.floor(y);
@@ -639,7 +692,7 @@ export class TiledLayer extends Renderable2D {
             logID(7238);
             return;
         }
-        if (ugid !== 0 && ugid < (this._tilesets[0].firstGid as unknown as number)) {
+        if (ugid !== 0 && ugid < this._tilesets[0].firstGid) {
             logID(7239, gid);
             return;
         }
@@ -655,31 +708,31 @@ export class TiledLayer extends Renderable2D {
         const oldGIDAndFlags = this.tiles[idx];
         if (gidAndFlags === oldGIDAndFlags) return;
 
-        const gid = (((gidAndFlags as unknown as number) & TileFlag.FLIPPED_MASK) >>> 0);
-        const grid = this.texGrids!.get(gid as unknown as GID);
+        const gid = ((gidAndFlags & TileFlag.FLIPPED_MASK) >>> 0);
+        const grid = this.texGrids!.get(gid);
 
         if (grid) {
             this.tiles[idx] = gidAndFlags;
             this._updateVertex(x, y);
         } else {
-            this.tiles[idx] = 0 as unknown as MixedGID;
+            this.tiles[idx] = 0;
         }
         this._cullingDirty = true;
     }
 
     /**
-     * @en
-     * Returns the tile gid at a given tile coordinate. <br />
-     * if it returns 0, it means that the tile is empty. <br />
-     * @zh
-     * 通过给定的 tile 坐标、flags（可选）返回 tile 的 GID. <br />
-     * 如果它返回 0，则表示该 tile 为空。<br />
-     * @method getTileGIDAt
-     * @param {Vec2} pos
-     * @return {Number}
-     * @example
-     * let tileGid = tiledLayer.getTileGIDAt(0, 0);
-     */
+      * @en
+      * Returns the tile gid at a given tile coordinate. <br />
+      * if it returns 0, it means that the tile is empty. <br />
+      * @zh
+      * 通过给定的 tile 坐标、flags（可选）返回 tile 的 GID. <br />
+      * 如果它返回 0，则表示该 tile 为空。<br />
+      * @method getTileGIDAt
+      * @param {Vec2} pos
+      * @return {Number}
+      * @example
+      * let tileGid = tiledLayer.getTileGIDAt(0, 0);
+      */
     public getTileGIDAt (x: number, y: number): number | null {
         if (this.isInvalidPosition(x, y)) {
             throw new Error('cc.TiledLayer.getTileGIDAt(): invalid position');
@@ -696,19 +749,19 @@ export class TiledLayer extends Renderable2D {
         return ((tile & TileFlag.FLIPPED_MASK) >>> 0);
     }
     /**
-     * @en
-     * Returns the tile flags at a given tile coordinate. <br />
-     * @zh
-     * 通过给定的 tile 坐标, 返回 tile 的 flags. <br />
-     * 如果它返回 null，则表示该 tile 为空。<br />
-     * @method getTileGIDAt
-     * @param {number}} x
-     * @param {number}} y
-     * @return {Number}
-     * @example
-     * let tileGid = tiledLayer.getTileGIDAt(0, 0);
-     */
-    public getTileFlagsAt (x: number, y: number) {
+      * @en
+      * Returns the tile flags at a given tile coordinate. <br />
+      * @zh
+      * 通过给定的 tile 坐标, 返回 tile 的 flags. <br />
+      * 如果它返回 null，则表示该 tile 为空。<br />
+      * @method getTileGIDAt
+      * @param {number}} x
+      * @param {number}} y
+      * @return {Number}
+      * @example
+      * let tileGid = tiledLayer.getTileGIDAt(0, 0);
+      */
+    public getTileFlagsAt (x: number, y: number): number | null {
         if (this.isInvalidPosition(x, y)) {
             throw new Error('TiledLayer.getTileFlagsAt: invalid position');
         }
@@ -724,7 +777,7 @@ export class TiledLayer extends Renderable2D {
         return ((tile & TileFlag.FLIPPED_ALL) >>> 0) as unknown as GIDFlags;
     }
 
-    public setCullingDirty (value: boolean) {
+    public setCullingDirty (value: boolean): void {
         this._cullingDirty = value;
     }
 
@@ -736,9 +789,9 @@ export class TiledLayer extends Renderable2D {
     // 'width, height' is the size of viewPort.
     public updateViewPort (x: number, y: number, width: number, height: number): void {
         if (this._viewPort.width === width
-            && this._viewPort.height === height
-            && this._viewPort.x === x
-            && this._viewPort.y === y) {
+             && this._viewPort.height === height
+             && this._viewPort.x === x
+             && this._viewPort.y === y) {
             return;
         }
         this._viewPort.x = x;
@@ -793,16 +846,13 @@ export class TiledLayer extends Renderable2D {
             _tempRowCol.col++;
         }
 
-        // avoid range out of max rect
-        if (_tempRowCol.row > this._rightTop.row) _tempRowCol.row = this._rightTop.row;
-        if (_tempRowCol.col > this._rightTop.col) _tempRowCol.col = this._rightTop.col;
-
         if (_tempRowCol.row !== rightTop.row || _tempRowCol.col !== rightTop.col) {
             rightTop.row = _tempRowCol.row;
             rightTop.col = _tempRowCol.col;
             this._cullingDirty = true;
-            this.markForUpdateRenderData();
         }
+
+        if (this._cullingDirty) this._markForUpdateRenderData();
     }
 
     // the result may not precise, but it dose't matter, it just uses to be got range
@@ -847,13 +897,13 @@ export class TiledLayer extends Renderable2D {
         return result;
     }
 
-    public updateCulling () {
-        if (EDITOR) {
+    public updateCulling (): void {
+        if (EDITOR_NOT_IN_PREVIEW) {
             this.enableCulling = false;
         } else if (this._enableCulling) {
             this.node.updateWorldTransform();
             Mat4.invert(_mat4_temp, this.node.getWorldMatrix());
-            const camera = director.root!.batcher2D.getFirstRenderCamera(this.node);
+            const camera = this._reinstallCamera(); // developer should call updateCalling if the camera has changed
             if (camera) {
                 _vec3_temp.x = 0;
                 _vec3_temp.y = 0;
@@ -873,32 +923,32 @@ export class TiledLayer extends Renderable2D {
     }
 
     /**
-     * @en Layer orientation, which is the same as the map orientation.
-     * @zh 获取 Layer 方向(同地图方向)。
-     * @method getLayerOrientation
-     * @return {Number}
-     * @example
-     * let orientation = tiledLayer.getLayerOrientation();
-     * cc.log("Layer Orientation: " + orientation);
-     */
-    public getLayerOrientation () {
+      * @en Layer orientation, which is the same as the map orientation.
+      * @zh 获取 Layer 方向(同地图方向)。
+      * @method getLayerOrientation
+      * @return {Number}
+      * @example
+      * let orientation = tiledLayer.getLayerOrientation();
+      * cc.log("Layer Orientation: " + orientation);
+      */
+    public getLayerOrientation (): Orientation | null {
         return this._layerOrientation;
     }
 
     /**
-     * @en properties from the layer. They can be added using Tiled.
-     * @zh 获取 layer 的属性，可以使用 Tiled 编辑器添加属性。
-     * @method getProperties
-     * @return {Object}
-     * @example
-     * let properties = tiledLayer.getProperties();
-     * cc.log("Properties: " + properties);
-     */
-    public getProperties () {
+      * @en properties from the layer. They can be added using Tiled.
+      * @zh 获取 layer 的属性，可以使用 Tiled 编辑器添加属性。
+      * @method getProperties
+      * @return {Object}
+      * @example
+      * let properties = tiledLayer.getProperties();
+      * cc.log("Properties: " + properties);
+      */
+    public getProperties (): PropertiesInfo | undefined {
         return this._properties;
     }
 
-    protected _updateVertex (col: number, row: number) {
+    protected _updateVertex (col: number, row: number): void {
         const FLIPPED_MASK = TileFlag.FLIPPED_MASK;
 
         const vertices = this.vertices;
@@ -992,7 +1042,7 @@ export class TiledLayer extends Renderable2D {
         }
 
         const rowData = vertices[cullingRow] = vertices[cullingRow] || { minCol: 0, maxCol: 0 };
-        const colData = rowData[cullingCol] = rowData[cullingCol] || {};
+        const colData = rowData[cullingCol] = rowData[cullingCol] || { left: 0, bottom: 0, index: 0 };
 
         // record each row range, it will faster when culling grid
         if (rowData.minCol > cullingCol) {
@@ -1006,10 +1056,16 @@ export class TiledLayer extends Renderable2D {
         // record max rect, when viewPort is bigger than layer, can make it smaller
         if (rightTop.row < cullingRow) {
             rightTop.row = cullingRow;
+            if (layerOrientation === Orientation.ISO) {
+                rightTop.row += 1;
+            }
         }
 
         if (rightTop.col < cullingCol) {
             rightTop.col = cullingCol;
+            if (layerOrientation === Orientation.ISO) {
+                rightTop.col += 1;
+            }
         }
 
         // _offset is whole layer offset
@@ -1050,7 +1106,7 @@ export class TiledLayer extends Renderable2D {
         this._cullingDirty = true;
     }
 
-    protected _updateVertices () {
+    protected _updateVertices (): void {
         const vertices = this.vertices;
         vertices.length = 0;
 
@@ -1081,25 +1137,25 @@ export class TiledLayer extends Renderable2D {
     }
 
     /**
-     * @en
-     * Get the TiledTile with the tile coordinate.<br/>
-     * If there is no tile in the specified coordinate and forceCreate parameter is true, <br/>
-     * then will create a new TiledTile at the coordinate.
-     * The renderer will render the tile with the rotation, scale, position and color property of the TiledTile.
-     * @zh
-     * 通过指定的 tile 坐标获取对应的 TiledTile。 <br/>
-     * 如果指定的坐标没有 tile，并且设置了 forceCreate 那么将会在指定的坐标创建一个新的 TiledTile 。<br/>
-     * 在渲染这个 tile 的时候，将会使用 TiledTile 的节点的旋转、缩放、位移、颜色属性。<br/>
-     * @method getTiledTileAt
-     * @param {Integer} x
-     * @param {Integer} y
-     * @param {Boolean} forceCreate
-     * @return {cc.TiledTile}
-     * @example
-     * let tile = tiledLayer.getTiledTileAt(100, 100, true);
-     * cc.log(tile);
-     */
-    public getTiledTileAt (x: number, y: number, forceCreate?: boolean) {
+      * @en
+      * Get the TiledTile with the tile coordinate.<br/>
+      * If there is no tile in the specified coordinate and forceCreate parameter is true, <br/>
+      * then will create a new TiledTile at the coordinate.
+      * The renderer will render the tile with the rotation, scale, position and color property of the TiledTile.
+      * @zh
+      * 通过指定的 tile 坐标获取对应的 TiledTile。 <br/>
+      * 如果指定的坐标没有 tile，并且设置了 forceCreate 那么将会在指定的坐标创建一个新的 TiledTile 。<br/>
+      * 在渲染这个 tile 的时候，将会使用 TiledTile 的节点的旋转、缩放、位移、颜色属性。<br/>
+      * @method getTiledTileAt
+      * @param {Integer} x
+      * @param {Integer} y
+      * @param {Boolean} forceCreate
+      * @return {cc.TiledTile}
+      * @example
+      * let tile = tiledLayer.getTiledTileAt(100, 100, true);
+      * cc.log(tile);
+      */
+    public getTiledTileAt (x: number, y: number, forceCreate?: boolean): TiledTile | null {
         if (this.isInvalidPosition(x, y)) {
             throw new Error('TiledLayer.getTiledTileAt: invalid position');
         }
@@ -1124,16 +1180,16 @@ export class TiledLayer extends Renderable2D {
     }
 
     /**
-     * @en
-     * Change tile to TiledTile at the specified coordinate.
-     * @zh
-     * 将指定的 tile 坐标替换为指定的 TiledTile。
-     * @method setTiledTileAt
-     * @param {Integer} x
-     * @param {Integer} y
-     * @param {cc.TiledTile} tiledTile
-     * @return {cc.TiledTile}
-     */
+      * @en
+      * Change tile to TiledTile at the specified coordinate.
+      * @zh
+      * 将指定的 tile 坐标替换为指定的 TiledTile。
+      * @method setTiledTileAt
+      * @param {Integer} x
+      * @param {Integer} y
+      * @param {cc.TiledTile} tiledTile
+      * @return {cc.TiledTile}
+      */
     public setTiledTileAt (x: number, y: number, tiledTile: TiledTile | null): TiledTile | null {
         if (this.isInvalidPosition(x, y)) {
             throw new Error('TiledLayer.setTiledTileAt: invalid position');
@@ -1157,12 +1213,12 @@ export class TiledLayer extends Renderable2D {
     }
 
     /**
-     * @en Return texture.
-     * @zh 获取纹理。
-     * @method getTexture
-     * @param index The index of textures
-     * @return {Texture2D}
-     */
+      * @en Return texture.
+      * @zh 获取纹理。
+      * @method getTexture
+      * @param index The index of textures
+      * @return {Texture2D}
+      */
     public getTexture (index?: number): SpriteFrame | null {
         index = index || 0;
         if (this._textures && index >= 0 && this._textures.length > index) {
@@ -1172,69 +1228,69 @@ export class TiledLayer extends Renderable2D {
     }
 
     /**
-     * @en Return texture.
-     * @zh 获取纹理。
-     * @method getTextures
-     * @return {Texture2D}
-     */
-    public getTextures () {
+      * @en Return texture.
+      * @zh 获取纹理。
+      * @method getTextures
+      * @return {Texture2D}
+      */
+    public getTextures (): SpriteFrame[] {
         return this._textures;
     }
 
     /**
-     * @en Set the texture.
-     * @zh 设置纹理。
-     * @method setTexture
-     * @param {SpriteFrame} texture
-     */
-    public setTexture (texture: SpriteFrame) {
+      * @en Set the texture.
+      * @zh 设置纹理。
+      * @method setTexture
+      * @param {SpriteFrame} texture
+      */
+    public setTexture (texture: SpriteFrame): void {
         this.setTextures([texture]);
     }
 
     /**
-     * @en Set the texture.
-     * @zh 设置纹理。
-     * @method setTexture
-     * @param {SpriteFrame} textures
-     */
-    public setTextures (textures: SpriteFrame[]) {
+      * @en Set the texture.
+      * @zh 设置纹理。
+      * @method setTexture
+      * @param {SpriteFrame} textures
+      */
+    public setTextures (textures: SpriteFrame[]): void {
         this._textures = textures;
-        this.markForUpdateRenderData();
+        this._markForUpdateRenderData();
     }
 
     /**
-     * @en Gets layer size.
-     * @zh 获得层大小。
-     * @method getLayerSize
-     * @return {Size}
-     * @example
-     * let size = tiledLayer.getLayerSize();
-     * cc.log("layer size: " + size);
-     */
+      * @en Gets layer size.
+      * @zh 获得层大小。
+      * @method getLayerSize
+      * @return {Size}
+      * @example
+      * let size = tiledLayer.getLayerSize();
+      * cc.log("layer size: " + size);
+      */
     public getLayerSize (): Size {
         return this._layerSize!;
     }
 
     /**
-     * @en Size of the map's tile (could be different from the tile's size).
-     * @zh 获取 tile 的大小( tile 的大小可能会有所不同)。
-     * @method getMapTileSize
-     * @return {Size}
-     * @example
-     * let mapTileSize = tiledLayer.getMapTileSize();
-     * cc.log("MapTile size: " + mapTileSize);
-     */
+      * @en Size of the map's tile (could be different from the tile's size).
+      * @zh 获取 tile 的大小( tile 的大小可能会有所不同)。
+      * @method getMapTileSize
+      * @return {Size}
+      * @example
+      * let mapTileSize = tiledLayer.getMapTileSize();
+      * cc.log("MapTile size: " + mapTileSize);
+      */
     public getMapTileSize (): Size {
         return this._mapTileSize!;
     }
 
     /**
-     * @en Gets Tile set first information for the layer.
-     * @zh 获取 layer 索引位置为0的 Tileset 信息。
-     * @method getTileSet
-     * @param index The index of tilesets
-     * @return {TMXTilesetInfo}
-     */
+      * @en Gets Tile set first information for the layer.
+      * @zh 获取 layer 索引位置为0的 Tileset 信息。
+      * @method getTileSet
+      * @param index The index of tilesets
+      * @return {TMXTilesetInfo}
+      */
     public getTileSet (index: number): TMXTilesetInfo | null {
         index = index || 0;
         if (this._tilesets && index >= 0 && this._tilesets.length > index) {
@@ -1244,32 +1300,32 @@ export class TiledLayer extends Renderable2D {
     }
 
     /**
-     * @en Gets tile set all information for the layer.
-     * @zh 获取 layer 所有的 Tileset 信息。
-     * @method getTileSet
-     * @return {TMXTilesetInfo}
-     */
+      * @en Gets tile set all information for the layer.
+      * @zh 获取 layer 所有的 Tileset 信息。
+      * @method getTileSet
+      * @return {TMXTilesetInfo}
+      */
     public getTileSets (): TMXTilesetInfo[] {
         return this._tilesets;
     }
 
     /**
-     * @en Sets tile set information for the layer.
-     * @zh 设置 layer 的 tileset 信息。
-     * @method setTileSet
-     * @param {TMXTilesetInfo} tileset
-     */
-    public setTileSet (tileset: TMXTilesetInfo) {
+      * @en Sets tile set information for the layer.
+      * @zh 设置 layer 的 tileset 信息。
+      * @method setTileSet
+      * @param {TMXTilesetInfo} tileset
+      */
+    public setTileSet (tileset: TMXTilesetInfo): void {
         this.setTileSets([tileset]);
     }
 
     /**
-     * @en Sets Tile set information for the layer.
-     * @zh 设置 layer 的 Tileset 信息。
-     * @method setTileSets
-     * @param {TMXTilesetInfo} tilesets
-     */
-    public setTileSets (tilesets: TMXTilesetInfo[]) {
+      * @en Sets Tile set information for the layer.
+      * @zh 设置 layer 的 Tileset 信息。
+      * @method setTileSets
+      * @param {TMXTilesetInfo} tilesets
+      */
+    public setTileSets (tilesets: TMXTilesetInfo[]): void {
         this._tilesets = tilesets;
         const textures: SpriteFrame[] = this._textures = [];
         const texGrids = this.texGrids!;
@@ -1281,177 +1337,245 @@ export class TiledLayer extends Renderable2D {
             }
         }
 
-        loadAllTextures(textures, () => {
-            for (let i = 0, l = tilesets.length; i < l; ++i) {
-                const tilesetInfo = tilesets[i];
-                if (!tilesetInfo) continue;
-                fillTextureGrids(tilesetInfo, texGrids, tilesetInfo.sourceImage);
-            }
-            this._prepareToRender();
-        });
+        for (let i = 0, l = tilesets.length; i < l; ++i) {
+            const tilesetInfo = tilesets[i];
+            if (!tilesetInfo) continue;
+            fillTextureGrids(tilesetInfo, texGrids, tilesetInfo.sourceImage);
+        }
+        this._prepareToRender();
     }
 
-    public init (layerInfo: TMXLayerInfo, mapInfo: TMXMapInfo, tilesets: TMXTilesetInfo[], textures: SpriteFrame[], texGrids: TiledTextureGrids) {
-        this._cullingDirty = true;
-        this._layerInfo = layerInfo;
-        this._mapInfo = mapInfo;
+    public init (
+        layerInfo: TMXLayerInfo,
+        mapInfo: TMXMapInfo,
+        tilesets: TMXTilesetInfo[],
+        textures: SpriteFrame[],
+        texGrids: TiledTextureGrids,
+    ): void {
+        const self = this;
+        self._cullingDirty = true;
+        self._layerInfo = layerInfo;
+        self._mapInfo = mapInfo;
 
         const size = layerInfo.layerSize!;
 
         // layerInfo
-        this._layerName = layerInfo.name;
-        this.tiles = layerInfo.tiles as unknown as any;
-        this._properties = layerInfo.properties;
-        this._layerSize = size;
-        this._minGID = layerInfo.minGID;
-        this._maxGID = layerInfo.maxGID;
-        this._opacity = layerInfo.opacity;
+        self._layerName = layerInfo.name;
+        self.tiles = layerInfo.tiles as unknown as any;
+        self._properties = layerInfo.properties;
+        self._layerSize = size;
+        self._minGID = layerInfo.minGID;
+        self._maxGID = layerInfo.maxGID;
+        self._opacity = layerInfo.opacity;
 
         if (layerInfo.tintColor) {
-            this._tintColor = layerInfo.tintColor;
+            self._tintColor = layerInfo.tintColor;
             // this.node.color = this._tintColor;
         }
 
-        this.renderOrder = mapInfo.renderOrder;
-        this._staggerAxis = mapInfo.getStaggerAxis()!;
-        this._staggerIndex = mapInfo.getStaggerIndex()!;
-        this._hexSideLength = mapInfo.getHexSideLength();
-        this._animations = mapInfo.getTileAnimations();
+        self.renderOrder = mapInfo.renderOrder;
+        self._staggerAxis = mapInfo.getStaggerAxis()!;
+        self._staggerIndex = mapInfo.getStaggerIndex()!;
+        self._hexSideLength = mapInfo.getHexSideLength();
+        self._animations = mapInfo.getTileAnimations();
 
         // tilesets
-        this._tilesets = tilesets;
+        self._tilesets = tilesets;
         // textures
-        this._textures = textures;
+        self._textures = textures;
         // grid texture
-        this.texGrids = texGrids;
+        self.texGrids = texGrids;
 
         // mapInfo
-        this._layerOrientation = mapInfo.orientation;
-        this._mapTileSize = mapInfo.getTileSize();
+        self._layerOrientation = mapInfo.orientation;
+        self._mapTileSize = mapInfo.getTileSize();
 
-        const maptw = this._mapTileSize.width;
-        const mapth = this._mapTileSize.height;
-        const layerW = this._layerSize.width;
-        const layerH = this._layerSize.height;
+        const maptw = self._mapTileSize.width;
+        const mapth = self._mapTileSize.height;
+        const layerW = self._layerSize.width;
+        const layerH = self._layerSize.height;
+        const uiTransformComp = self.node._getUITransformComp()!;
 
-        if (this._layerOrientation === Orientation.HEX) {
+        if (self._layerOrientation === Orientation.HEX) {
             let width = 0;
             let height = 0;
+            const tileWidth = maptw & ~1;
+            const tileHeight = mapth & ~1;
 
-            this._odd_even = (this._staggerIndex === StaggerIndex.STAGGERINDEX_ODD) ? 1 : -1;
-            if (this._staggerAxis === StaggerAxis.STAGGERAXIS_X) {
-                this._diffX1 = (maptw - this._hexSideLength) / 2;
-                this._diffY1 = 0;
-                height = mapth * (layerH + 0.5);
-                width = (maptw + this._hexSideLength) * Math.floor(layerW / 2) + maptw * (layerW % 2);
+            self._odd_even = (self._staggerIndex === StaggerIndex.STAGGERINDEX_ODD) ? 1 : -1;
+            if (self._staggerAxis === StaggerAxis.STAGGERAXIS_X) {
+                self._diffX1 = (tileWidth - self._hexSideLength) / 2;
+                self._diffY1 = 0;
+                width = (self._diffX1 + self._hexSideLength) * layerW + self._diffX1;
+                height = (tileHeight * layerH) + tileHeight / 2;
             } else {
-                this._diffX1 = 0;
-                this._diffY1 = (mapth - this._hexSideLength) / 2;
-                width = maptw * (layerW + 0.5);
-                height = (mapth + this._hexSideLength) * Math.floor(layerH / 2) + mapth * (layerH % 2);
+                self._diffX1 = 0;
+                self._diffY1 = (tileHeight - self._hexSideLength) / 2;
+                width = (tileWidth * layerW) + tileWidth / 2;
+                height = (self._diffY1 + self._hexSideLength) * layerH + self._diffY1;
             }
-            this.node._uiProps.uiTransformComp!.setContentSize(width, height);
-        } else if (this._layerOrientation === Orientation.ISO) {
+            uiTransformComp.setContentSize(width, height);
+        } else if (self._layerOrientation === Orientation.ISO) {
             const wh = layerW + layerH;
-            this.node._uiProps.uiTransformComp!.setContentSize(maptw * 0.5 * wh, mapth * 0.5 * wh);
+            uiTransformComp.setContentSize(maptw * 0.5 * wh, mapth * 0.5 * wh);
         } else {
-            this.node._uiProps.uiTransformComp!.setContentSize(layerW * maptw, layerH * mapth);
+            uiTransformComp.setContentSize(layerW * maptw, layerH * mapth);
         }
 
         // offset (after layer orientation is set);
-        this._offset = new Vec2(layerInfo.offset.x, -layerInfo.offset.y);
-        this._useAutomaticVertexZ = false;
-        this._vertexZvalue = 0;
-        this._syncAnchorPoint();
-        this._prepareToRender();
+        self._offset = new Vec2(layerInfo.offset.x, -layerInfo.offset.y);
+        self._useAutomaticVertexZ = false;
+        self._vertexZvalue = 0;
+        self._syncAnchorPoint();
+        self._prepareToRender();
     }
 
-    protected _prepareToRender () {
+    protected _prepareToRender (): void {
         this._updateVertices();
         this._updateAllUserNode();
     }
 
-    public requestMeshRenderData () {
-        if (!this._meshRenderDataArray) {
-            this._meshRenderDataArray = [];
-        }
-        const arr = this._meshRenderDataArray as any[];
+    public requestTiledRenderData (): TiledRenderData {
+        const arr = this._tiledDataArray as any[];
         while (arr.length > 0 && arr[arr.length - 1].subNodes && arr[arr.length - 1].subNodes.length === 0) {
             arr.pop();
         }
         if (arr.length > 0) {
             const last = arr[arr.length - 1];
-            if (last.renderData && last.renderData.byteCount === 0) {
-                return last as TiledMeshData;
+            if (last.renderData && last.renderData.vertexCount === 0) {
+                return last as TiledRenderData;
             }
         }
-
-        const renderData = new MeshRenderData();
-        const comb = { renderData, texture: null };
-        Object.defineProperty(renderData, 'material', { get: () => this.getRenderMaterial(0) });
-        this._meshRenderDataArray.push(comb);
-        return comb;
+        const comb = { renderData: null, texture: null };
+        this._tiledDataArray.push(comb);
+        return (comb as TiledRenderData);
     }
 
-    public requestSubNodesData () {
-        if (!this._meshRenderDataArray) {
-            this._meshRenderDataArray = [];
-        }
-        const arr = this._meshRenderDataArray as any[];
-        while (arr.length > 0 && arr[arr.length - 1].renderData && arr[arr.length - 1].renderData.byteCount === 0) {
-            arr.pop();
-        }
+    public requestSubNodesData (): TiledSubNodeData {
+        const arr = this._tiledDataArray;
         if (arr.length > 0) {
-            if (arr[arr.length - 1].subNodes && arr[arr.length - 1].subNodes.length === 0) {
-                return arr[arr.length - 1] as TiledSubNodeData;
+            const last = arr[arr.length - 1];
+            if (isTiledSubNodeData(last) && last.subNodes.length === 0) {
+                return last;
             }
         }
-
         const renderData: (TiledUserNodeData | null)[] = [];
         const comb = { subNodes: renderData };
-        this._meshRenderDataArray.push(comb);
+        this._tiledDataArray.push(comb);
         return comb;
     }
 
-    public destroyRenderData () {
-        if (this._meshRenderDataArray) {
-            this._meshRenderDataArray.forEach((rd) => { if ((rd as TiledMeshData).renderData) (rd as TiledMeshData).renderData.reset(); });
-            this._meshRenderDataArray.length = 0;
-        }
+    public destroyRenderData (): void {
+        this._tiledDataArray.forEach((rd) => {
+            const renderData = (rd as TiledRenderData).renderData;
+            if (renderData) RenderData.remove(renderData);
+        });
+        this._tiledDataArray.length = 0;
+        super.destroyRenderData();
     }
 
-    protected _flushAssembler () {
-        const assembler = TiledLayer.Assembler!.getAssembler(this);
+    protected _flushAssembler (): void {
+        const assembler = TiledLayer.Assembler.getAssembler(this);
         if (this._assembler !== assembler) {
             this._assembler = assembler;
+            this._assembler.createData!(this);
         }
-        if (!this._meshRenderDataArray) {
-            if (this._assembler && this._assembler.createData) {
-                this._assembler.createData(this);
-                this.markForUpdateRenderData();
-                this._updateColor();
-            }
+        if (this._tiledDataArray.length === 0) {
+            this._markForUpdateRenderData();
+            this._updateColor();
         }
     }
 
-    // 当前的 _meshRenderDataArray 的索引, 以便 fillBuffers 选取 RenderData
-    public _meshRenderDataArrayIdx = 0;
-    protected _render (ui: Batcher2D) {
-        if (this._meshRenderDataArray) {
-            for (let i = 0; i < this._meshRenderDataArray.length; i++) {
-                this._meshRenderDataArrayIdx = i;
-                const m = this._meshRenderDataArray[i];
-                if ((m as TiledSubNodeData).subNodes) {
-                    // 提前处理 User Nodes
-                    (m as TiledSubNodeData).subNodes.forEach((c) => {
-                        if (c) ui.walk(c.node);
-                    });
-                } else if ((m as TiledMeshData).texture) {
+    /**
+      * @en
+      * Index of mesh render data array
+      * @zh
+      * 网格渲染数据数组的索引
+      * @deprecated since v3.5.0, this is an engine private interface that will be removed in the future.
+      */
+    public _tiledDataArrayIdx = 0;
+    protected _render (ui: IBatcher): void {
+        for (let i = 0; i < this._tiledDataArray.length; i++) {
+            this._tiledDataArrayIdx = i;
+            const m = this._tiledDataArray[i];
+            if ((m as TiledSubNodeData).subNodes) {
+                // 提前处理 User Nodes
+                (m as TiledSubNodeData).subNodes.forEach((c) => {
+                    if (c) ui.walk(c.node);
+                });
+            } else {
+                const td = m as TiledRenderData;
+                if (td.texture) {
                     // NOTE: 由于 commitComp 只支持单张纹理, 故分多次提交
-                    ui.commitComp(this, (m as TiledMeshData).texture, this._assembler, null);
+                    ui.commitComp(this, td.renderData, td.texture, this._assembler, null);
                 }
             }
-            this.node._static = true;
         }
+        this.node._static = true;
+    }
+
+    protected createRenderEntity (): RenderEntity {
+        return new RenderEntity(RenderEntityType.CROSSED);
+    }
+
+    private fillIndicesBuffer (renderData: RenderData, drawInfo: RenderDrawInfo): void {
+        const iBuf = renderData.chunk.meshBuffer.iData;
+
+        let indexOffset = renderData.chunk.meshBuffer.indexOffset;
+        drawInfo.setIndexOffset(indexOffset);
+        let vertexId = renderData.chunk.vertexOffset;
+        const quadCount = renderData.vertexCount / 4;
+        for (let i = 0; i < quadCount; i += 1) {
+            iBuf[indexOffset] = vertexId;
+            iBuf[indexOffset + 1] = vertexId + 1;
+            iBuf[indexOffset + 2] = vertexId + 2;
+            iBuf[indexOffset + 3] = vertexId + 2;
+            iBuf[indexOffset + 4] = vertexId + 1;
+            iBuf[indexOffset + 5] = vertexId + 3;
+            indexOffset += 6;
+            vertexId += 4;
+        }
+        renderData.chunk.meshBuffer.indexOffset = indexOffset;
+        drawInfo.setIBCount(quadCount * 6);
+    }
+
+    public prepareDrawData (): void {
+        this._drawInfoList.length = 0;
+        const entity = this.renderEntity;
+        entity.clearDynamicRenderDrawInfos();
+        const tiledDataArray = this._tiledDataArray;
+        let idx = 0;
+        tiledDataArray.forEach((m) => {
+            if (isTiledSubNodeData(m)) {
+                // 提前处理 User Nodes
+                m.subNodes.forEach((c) => {
+                    if (c) {
+                        if (!this._drawInfoList[idx]) {
+                            this._drawInfoList[idx] = new RenderDrawInfo();
+                        }
+                        const drawInfo = this._drawInfoList[idx];
+                        drawInfo.setDrawInfoType(RenderDrawInfoType.SUB_NODE);
+                        drawInfo.setSubNode(c.node);
+                        entity.setDynamicRenderDrawInfo(drawInfo, idx);
+                        idx++;
+                    }
+                });
+            } else {
+                const td = m;
+                if (td.texture) {
+                    if (!this._drawInfoList[idx]) {
+                        this._drawInfoList[idx] = new RenderDrawInfo();
+                    }
+                    const drawInfo = this._drawInfoList[idx];
+                    td.renderData!.fillDrawInfoAttributes(drawInfo);
+                    drawInfo.setTexture(td.texture.getGFXTexture());
+                    drawInfo.setSampler(td.texture.getGFXSampler());
+                    drawInfo.setMaterial(this.getRenderMaterial(0)!);
+                    this.fillIndicesBuffer(td.renderData!, drawInfo);
+                    entity.setDynamicRenderDrawInfo(drawInfo, idx);
+                    idx++;
+                }
+            }
+        });
     }
 }

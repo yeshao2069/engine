@@ -1,13 +1,14 @@
-const { template, $, update } = require('./base');
+const { template, $, update, close } = require('./base');
+const { getMessageProtocolScene } = require('../utils/prop');
 
 exports.template = template;
 exports.$ = $;
 exports.update = update;
+exports.close = close;
 
-exports.ready = function () {
+exports.ready = function() {
     this.elements = {
         threshold: {
-            displayOrder: 0,
             ready(element) {
                 const $input = element.querySelector('ui-num-input[slot="content"]');
                 $input.setAttribute('style', 'display: inline-block;margin-right: 10px;');
@@ -19,12 +20,19 @@ exports.ready = function () {
                 $button.innerText = 'Regenerate Points';
                 $input.after($button);
 
-                $button.addEventListener('confirm', () => {
-                    const uuids = this.dump.value.uuid.values || [this.dump.value.uuid.value];
+                $button.addEventListener('change', (event) => {
+                    event.stopPropagation();
+                });
 
-                    uuids.forEach((uuid) => {
-                        Editor.Message.request('scene', 'regenerate-polygon-2d-points', uuid);
-                    });
+                $button.addEventListener('confirm', async (event) => {
+                    event.stopPropagation();
+
+                    const uuids = this.dump.value.uuid.values || [this.dump.value.uuid.value];
+                    const undoID = await Editor.Message.request(getMessageProtocolScene(this.$this), 'begin-recording', uuids);
+                    for (const uuid of uuids) {
+                        await Editor.Message.request(getMessageProtocolScene(this.$this), 'regenerate-polygon-2d-points', uuid);
+                    }
+                    await Editor.Message.request(getMessageProtocolScene(this.$this), 'end-recording', undoID);
                 });
             },
         },

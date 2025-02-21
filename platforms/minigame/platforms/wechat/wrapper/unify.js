@@ -1,12 +1,13 @@
 const utils = require('./utils');
 
+window.__globalAdapter = window.__globalAdapter || {};
 if (window.__globalAdapter) {
-    let globalAdapter = window.__globalAdapter;
+    const globalAdapter = window.__globalAdapter;
     // SystemInfo
-    let systemInfo = wx.getSystemInfoSync();
-    let windowWidth = systemInfo.windowWidth;
-    let windowHeight = systemInfo.windowHeight;
-    let isLandscape = windowWidth > windowHeight;
+    const systemInfo = wx.getSystemInfoSync();
+    const windowWidth = systemInfo.windowWidth;
+    const windowHeight = systemInfo.windowHeight;
+    const isLandscape = windowWidth > windowHeight;
     globalAdapter.isSubContext = (wx.getOpenDataContext === undefined);
     globalAdapter.isDevTool = (systemInfo.platform === 'devtools');
     utils.cloneMethod(globalAdapter, wx, 'getSystemInfoSync');
@@ -19,7 +20,7 @@ if (window.__globalAdapter) {
 
     // Audio
     utils.cloneMethod(globalAdapter, wx, 'createInnerAudioContext');
-    
+
     // AudioInterruption Evnet
     utils.cloneMethod(globalAdapter, wx, 'onAudioInterruptionEnd');
     utils.cloneMethod(globalAdapter, wx, 'onAudioInterruptionBegin');
@@ -58,6 +59,12 @@ if (window.__globalAdapter) {
     utils.cloneMethod(globalAdapter, wx, 'onShow');
     utils.cloneMethod(globalAdapter, wx, 'onHide');
 
+    // wechat program use onAppShow/onAppHide
+    if (typeof getApp === 'function') {
+        wx.onShow = wx.onAppShow;
+        wx.onHide = wx.onAppHide;
+    }
+
     // onError
     utils.cloneMethod(globalAdapter, wx, 'onError');
     // offError
@@ -67,11 +74,10 @@ if (window.__globalAdapter) {
     let isAccelerometerInit = false;
     let deviceOrientation = 1;
     if (wx.onDeviceOrientationChange) {
-        wx.onDeviceOrientationChange(function (res) {
+        wx.onDeviceOrientationChange((res) => {
             if (res.value === 'landscape') {
             deviceOrientation = 1;
-            }
-            else if (res.value === 'landscapeReverse') {
+            } else if (res.value === 'landscapeReverse') {
             deviceOrientation = -1;
             }
         });
@@ -80,12 +86,12 @@ if (window.__globalAdapter) {
         startAccelerometer (cb) {
             if (!isAccelerometerInit) {
                 isAccelerometerInit = true;
-                wx.onAccelerometerChange && wx.onAccelerometerChange(function (res) {
-                    let resClone = {};
+                wx.onAccelerometerChange && wx.onAccelerometerChange((res) => {
+                    const resClone = {};
                     let x = res.x;
                     let y = res.y;
                     if (isLandscape) {
-                        let tmp = x;
+                        const tmp = x;
                         x = -y;
                         y = tmp;
                     }
@@ -95,8 +101,7 @@ if (window.__globalAdapter) {
                     resClone.z = res.z;
                     cb && cb(resClone);
                 });
-            }
-            else {
+            } else {
                 wx.startAccelerometer && wx.startAccelerometer({
                     fail (err) {
                         console.error('start accelerometer failed', err);
@@ -117,21 +122,4 @@ if (window.__globalAdapter) {
             });
         },
     });
-
-    // safeArea
-    // origin point on the top-left corner
-    globalAdapter.getSafeArea = function () {
-        let { top, left, bottom, right, width, height } = systemInfo.safeArea;
-        // HACK: on iOS device, the orientation should mannually rotate
-        if (systemInfo.platform === 'ios' && !globalAdapter.isDevTool && isLandscape) {
-            let tempData = [right, top, left, bottom, width, height];
-            top = windowHeight - tempData[0];
-            left = tempData[1];
-            bottom = windowHeight - tempData[2];
-            right = tempData[3];
-            height = tempData[4];
-            width = tempData[5];
-        }
-        return { top, left, bottom, right, width, height };
-    }
 }

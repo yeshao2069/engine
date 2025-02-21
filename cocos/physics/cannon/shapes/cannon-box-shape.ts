@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,27 +20,22 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-
-/**
- * @packageDocumentation
- * @hidden
- */
+*/
 
 import CANNON from '@cocos/cannon';
-import { Vec3 } from '../../../core/math';
+import { clamp, Vec3 } from '../../../core';
 import { commitShapeUpdates } from '../cannon-util';
 import { CannonShape } from './cannon-shape';
 import { IBoxShape } from '../../spec/i-physics-shape';
-import { IVec3Like } from '../../../core/math/type-define';
-import { BoxCollider } from '../../../../exports/physics-framework';
+import { BoxCollider, PhysicsSystem } from '../../../../exports/physics-framework';
+import { absolute, VEC3_0 } from '../../utils/util';
 
 export class CannonBoxShape extends CannonShape implements IBoxShape {
-    public get collider () {
+    public get collider (): BoxCollider {
         return this._collider as BoxCollider;
     }
 
-    public get impl () {
+    public get impl (): CANNON.Box {
         return this._shape as CANNON.Box;
     }
 
@@ -52,25 +46,29 @@ export class CannonBoxShape extends CannonShape implements IBoxShape {
         this._shape = new CANNON.Box(this.halfExtent.clone());
     }
 
-    setSize (v: IVec3Like) {
-        Vec3.multiplyScalar(this.halfExtent, v, 0.5);
-        const ws = this.collider.node.worldScale;
-        this.impl.halfExtents.x = this.halfExtent.x * Math.abs(ws.x);
-        this.impl.halfExtents.y = this.halfExtent.y * Math.abs(ws.y);
-        this.impl.halfExtents.z = this.halfExtent.z * Math.abs(ws.z);
+    updateSize (): void {
+        Vec3.multiplyScalar(this.halfExtent, this.collider.size, 0.5);
+        const ws = absolute(VEC3_0.set(this.collider.node.worldScale));
+        const x = this.halfExtent.x * ws.x;
+        const y = this.halfExtent.y * ws.y;
+        const z = this.halfExtent.z * ws.z;
+        const minVolumeSize = PhysicsSystem.instance.minVolumeSize;
+        this.impl.halfExtents.x = clamp(x, minVolumeSize, Number.MAX_VALUE);
+        this.impl.halfExtents.y = clamp(y, minVolumeSize, Number.MAX_VALUE);
+        this.impl.halfExtents.z = clamp(z, minVolumeSize, Number.MAX_VALUE);
         this.impl.updateConvexPolyhedronRepresentation();
         if (this._index !== -1) {
             commitShapeUpdates(this._body);
         }
     }
 
-    onLoad () {
+    onLoad (): void {
         super.onLoad();
-        this.setSize(this.collider.size);
+        this.updateSize();
     }
 
     setScale (scale: Vec3): void {
         super.setScale(scale);
-        this.setSize(this.collider.size);
+        this.updateSize();
     }
 }

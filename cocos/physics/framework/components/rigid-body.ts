@@ -1,20 +1,19 @@
 /* eslint-disable @typescript-eslint/no-namespace */
 /* eslint-disable func-names */
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,12 +22,7 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-
-/**
- * @packageDocumentation
- * @module physics
- */
+*/
 
 import {
     ccclass,
@@ -43,11 +37,11 @@ import {
     type,
     serializable,
 } from 'cc.decorator';
-import { DEBUG, EDITOR } from 'internal:constants';
-import { Vec3 } from '../../../core/math';
-import { Component, error, warn } from '../../../core';
+import { DEBUG } from 'internal:constants';
+import { Vec3, error, warn } from '../../../core';
+import { Component } from '../../../scene-graph';
 import { IRigidBody } from '../../spec/i-rigid-body';
-import { createRigidBody } from '../instance';
+import { selector, createRigidBody } from '../physics-selector';
 import { ERigidBodyType } from '../physics-enum';
 import { PhysicsSystem } from '../physics-system';
 
@@ -84,19 +78,15 @@ export class RigidBody extends Component {
     @displayOrder(-2)
     @tooltip('i18n:physics3d.rigidbody.group')
     public get group (): number {
-        if (EDITOR) {
-            return this._group;
-        } else {
-            return this.getGroup();
-        }
+        return this._group;
     }
 
     public set group (v: number) {
         if (DEBUG && !Number.isInteger(Math.log2(v >>> 0))) warn('[Physics]: The group should only have one bit.');
         this._group = v;
-        if (!EDITOR && this.getGroup() === v) return;
         if (this._body) {
-            this._body.setGroup(v);
+            // The judgment is added here because the data exists in two places
+            if (this._body.getGroup() !== v) this._body.setGroup(v);
         }
     }
 
@@ -116,9 +106,7 @@ export class RigidBody extends Component {
     public set type (v: ERigidBodyType) {
         if (this._type === v) return;
         this._type = v;
-        if (this._body) {
-            this._body.setType(v);
-        }
+        if (this._body) this._body.setType(v);
     }
 
     /**
@@ -127,20 +115,19 @@ export class RigidBody extends Component {
      * @zh
      * 获取或设置刚体的质量。
      */
-    @visible(function (this: RigidBody) { return this.isDynamic; })
+    @visible(isDynamicBody)
     @displayOrder(0)
     @tooltip('i18n:physics3d.rigidbody.mass')
-    public get mass () {
+    public get mass (): number {
         return this._mass;
     }
 
     public set mass (value) {
+        if (DEBUG && value <= 0) warn('[Physics]: The mass should be greater than zero.');
         if (this._mass === value) return;
         value = value <= 0 ? 0.0001 : value;
         this._mass = value;
-        if (this._body) {
-            this._body.setMass(value);
-        }
+        if (this._body) this._body.setMass(value);
     }
 
     /**
@@ -149,7 +136,7 @@ export class RigidBody extends Component {
      * @zh
      * 获取或设置是否允许休眠。
      */
-    @visible(function (this: RigidBody) { return this.isDynamic; })
+    @visible(isDynamicBody)
     @displayOrder(0.5)
     @tooltip('i18n:physics3d.rigidbody.allowSleep')
     public get allowSleep (): boolean {
@@ -158,9 +145,7 @@ export class RigidBody extends Component {
 
     public set allowSleep (v: boolean) {
         this._allowSleep = v;
-        if (this._body) {
-            this._body.setAllowSleep(v);
-        }
+        if (this._body) this._body.setAllowSleep(v);
     }
 
     /**
@@ -169,18 +154,17 @@ export class RigidBody extends Component {
      * @zh
      * 获取或设置线性阻尼。
      */
-    @visible(function (this: RigidBody) { return this.isDynamic; })
+    @visible(isDynamicBody)
     @displayOrder(1)
     @tooltip('i18n:physics3d.rigidbody.linearDamping')
-    public get linearDamping () {
+    public get linearDamping (): number {
         return this._linearDamping;
     }
 
     public set linearDamping (value) {
+        if (DEBUG && (value < 0 || value > 1)) warn('[Physics]: The damping should be between zero to one.');
         this._linearDamping = value;
-        if (this._body) {
-            this._body.setLinearDamping(value);
-        }
+        if (this._body) this._body.setLinearDamping(value);
     }
 
     /**
@@ -189,18 +173,17 @@ export class RigidBody extends Component {
      * @zh
      * 获取或设置旋转阻尼。
      */
-    @visible(function (this: RigidBody) { return this.isDynamic; })
+    @visible(isDynamicBody)
     @displayOrder(2)
     @tooltip('i18n:physics3d.rigidbody.angularDamping')
-    public get angularDamping () {
+    public get angularDamping (): number {
         return this._angularDamping;
     }
 
     public set angularDamping (value) {
+        if (DEBUG && (value < 0 || value > 1)) warn('[Physics]: The damping should be between zero to one.');
         this._angularDamping = value;
-        if (this._body) {
-            this._body.setAngularDamping(value);
-        }
+        if (this._body) this._body.setAngularDamping(value);
     }
 
     /**
@@ -209,18 +192,16 @@ export class RigidBody extends Component {
      * @zh
      * 获取或设置刚体是否使用重力。
      */
-    @visible(function (this: RigidBody) { return this.isDynamic; })
+    @visible(isDynamicBody)
     @displayOrder(4)
     @tooltip('i18n:physics3d.rigidbody.useGravity')
-    public get useGravity () {
+    public get useGravity (): boolean {
         return this._useGravity;
     }
 
     public set useGravity (value) {
         this._useGravity = value;
-        if (this._body) {
-            this._body.useGravity(value);
-        }
+        if (this._body) this._body.useGravity(value);
     }
 
     /**
@@ -229,10 +210,10 @@ export class RigidBody extends Component {
      * @zh
      * 获取或设置线性速度的因子，可以用来控制每个轴方向上的速度的缩放。
      */
-    @visible(function (this: RigidBody) { return this.isDynamic; })
+    @visible(isDynamicBody)
     @displayOrder(6)
     @tooltip('i18n:physics3d.rigidbody.linearFactor')
-    public get linearFactor () {
+    public get linearFactor (): Vec3 {
         return this._linearFactor;
     }
 
@@ -249,10 +230,10 @@ export class RigidBody extends Component {
      * @zh
      * 获取或设置旋转速度的因子，可以用来控制每个轴方向上的旋转速度的缩放。
      */
-    @visible(function (this: RigidBody) { return this.isDynamic; })
+    @visible(isDynamicBody)
     @displayOrder(7)
     @tooltip('i18n:physics3d.rigidbody.angularFactor')
-    public get angularFactor () {
+    public get angularFactor (): Vec3 {
         return this._angularFactor;
     }
 
@@ -270,15 +251,34 @@ export class RigidBody extends Component {
      * 获取或设置进入休眠的速度临界值。
      */
     public get sleepThreshold (): number {
-        if (this._assertOnLoadCalled) {
+        if (this._isInitialized) {
             return this._body!.getSleepThreshold();
         }
-        return 0;
+        return 0.1;
     }
 
     public set sleepThreshold (v: number) {
-        if (this._assertOnLoadCalled) {
+        if (this._isInitialized) {
             this._body!.setSleepThreshold(v);
+        }
+    }
+
+    /**
+     * @en
+     * Turning on or off continuous collision detection.
+     * @zh
+     * 开启或关闭连续碰撞检测。
+     */
+    public get useCCD (): boolean {
+        if (this._isInitialized) {
+            return this._body!.isUsingCCD();
+        }
+        return false;
+    }
+
+    public set useCCD (v: boolean) {
+        if (this._isInitialized) {
+            this._body!.useCCD(v);
         }
     }
 
@@ -289,9 +289,7 @@ export class RigidBody extends Component {
      * 获取是否是唤醒的状态。
      */
     public get isAwake (): boolean {
-        if (this._assertOnLoadCalled) {
-            return this._body!.isAwake;
-        }
+        if (this._isInitialized) return this._body!.isAwake;
         return false;
     }
 
@@ -302,9 +300,7 @@ export class RigidBody extends Component {
      * 获取是否是可进入休眠的状态。
      */
     public get isSleepy (): boolean {
-        if (this._assertOnLoadCalled) {
-            return this._body!.isSleepy;
-        }
+        if (this._isInitialized) return this._body!.isSleepy;
         return false;
     }
 
@@ -315,9 +311,7 @@ export class RigidBody extends Component {
      * 获取是否是正在休眠的状态。
      */
     public get isSleeping (): boolean {
-        if (this._assertOnLoadCalled) {
-            return this._body!.isSleeping;
-        }
+        if (this._isInitialized) return this._body!.isSleeping;
         return false;
     }
 
@@ -357,7 +351,7 @@ export class RigidBody extends Component {
      * @zh
      * 获取或设置刚体是否是运动态类型的（将由用户来控制运动）。
      */
-    public get isKinematic () {
+    public get isKinematic (): boolean {
         return this._type === ERigidBodyType.KINEMATIC;
     }
 
@@ -372,7 +366,7 @@ export class RigidBody extends Component {
      * @zh
      * 获取封装对象，通过此对象可以访问到底层实例。
      */
-    public get body () {
+    public get body (): IRigidBody | null {
         return this._body;
     }
 
@@ -407,37 +401,30 @@ export class RigidBody extends Component {
     @serializable
     private _angularFactor: Vec3 = new Vec3(1, 1, 1);
 
-    protected get _assertOnLoadCalled (): boolean {
-        const r = this._isOnLoadCalled === 0;
-        if (r) { error('[Physics]: Please make sure that the node has been added to the scene'); }
+    protected get _isInitialized (): boolean {
+        const r = this._body === null;
+        if (r) { error('[Physics]: This component has not been call onLoad yet, please make sure the node has been added to the scene.'); }
         return !r;
     }
 
     /// COMPONENT LIFECYCLE ///
 
-    protected onLoad () {
-        if (!EDITOR) {
-            this._body = createRigidBody();
-            this._body.initialize(this);
-        }
+    protected onLoad (): void {
+        if (!selector.runInEditor) return;
+        this._body = createRigidBody();
+        this._body.initialize(this);
     }
 
-    protected onEnable () {
-        if (this._body) {
-            this._body.onEnable!();
-        }
+    protected onEnable (): void {
+        if (this._body) this._body.onEnable!();
     }
 
-    protected onDisable () {
-        if (this._body) {
-            this._body.onDisable!();
-        }
+    protected onDisable (): void {
+        if (this._body) this._body.onDisable!();
     }
 
-    protected onDestroy () {
-        if (this._body) {
-            this._body.onDestroy!();
-        }
+    protected onDestroy (): void {
+        if (this._body) this._body.onDestroy!();
     }
 
     /// PUBLIC METHOD ///
@@ -447,13 +434,11 @@ export class RigidBody extends Component {
      * Apply force to a world point. This could, for example, be a point on the Body surface.
      * @zh
      * 在世界空间中，相对于刚体的质心的某点上对刚体施加作用力。
-     * @param force - 作用力
-     * @param relativePoint - 作用点，相对于刚体的质心
+     * @param force @zh 作用力 @en The force applied
+     * @param relativePoint @zh 作用点，相对于刚体的质心 @en The point to apply the force on, relative to the center of mass of the rigid body
      */
-    public applyForce (force: Vec3, relativePoint?: Vec3) {
-        if (this._assertOnLoadCalled) {
-            this._body!.applyForce(force, relativePoint);
-        }
+    public applyForce (force: Vec3, relativePoint?: Vec3): void {
+        if (this._isInitialized) this._body!.applyForce(force, relativePoint);
     }
 
     /**
@@ -461,13 +446,11 @@ export class RigidBody extends Component {
      * Apply force to a local point. This could, for example, be a point on the Body surface.
      * @zh
      * 在本地空间中，相对于刚体的质心的某点上对刚体施加作用力。
-     * @param force - 作用力
-     * @param localPoint - 作用点
+     * @param force @zh 作用力 @en The force applied
+     * @param localPoint @zh 作用点 @en The point to apply the force on
      */
-    public applyLocalForce (force: Vec3, localPoint?: Vec3) {
-        if (this._assertOnLoadCalled) {
-            this._body!.applyLocalForce(force, localPoint);
-        }
+    public applyLocalForce (force: Vec3, localPoint?: Vec3): void {
+        if (this._isInitialized) this._body!.applyLocalForce(force, localPoint);
     }
 
     /**
@@ -475,13 +458,11 @@ export class RigidBody extends Component {
      * In world space, impulse is applied to the rigid body at some point relative to the center of mass of the rigid body.
      * @zh
      * 在世界空间中，相对于刚体的质心的某点上对刚体施加冲量。
-     * @param impulse - 冲量
-     * @param relativePoint - 作用点，相对于刚体的中心点
+     * @param impulse @zh 冲量 @en The impulse applied
+     * @param relativePoint @zh 作用点，相对于刚体的中心点 @en The point to apply the impulse, relative to the center of mass of the rigid body
      */
-    public applyImpulse (impulse: Vec3, relativePoint?: Vec3) {
-        if (this._assertOnLoadCalled) {
-            this._body!.applyImpulse(impulse, relativePoint);
-        }
+    public applyImpulse (impulse: Vec3, relativePoint?: Vec3): void {
+        if (this._isInitialized) this._body!.applyImpulse(impulse, relativePoint);
     }
 
     /**
@@ -489,13 +470,11 @@ export class RigidBody extends Component {
      * In local space, impulse is applied to the rigid body at some point relative to the center of mass of the rigid body.
      * @zh
      * 在本地空间中，相对于刚体的质心的某点上对刚体施加冲量。
-     * @param impulse - 冲量
-     * @param localPoint - 作用点
+     * @param impulse @zh 冲量 @en The impulse applied
+     * @param localPoint @zh 作用点 @en The point to apply the impulse
      */
-    public applyLocalImpulse (impulse: Vec3, localPoint?: Vec3) {
-        if (this._assertOnLoadCalled) {
-            this._body!.applyLocalImpulse(impulse, localPoint);
-        }
+    public applyLocalImpulse (impulse: Vec3, localPoint?: Vec3): void {
+        if (this._isInitialized) this._body!.applyLocalImpulse(impulse, localPoint);
     }
 
     /**
@@ -503,23 +482,21 @@ export class RigidBody extends Component {
      * In world space, torque is applied to the rigid body.
      * @zh
      * 在世界空间中，对刚体施加扭矩。
-     * @param torque - 扭矩
+     * @param torque @zh 扭矩 @en The torque applied
      */
-    public applyTorque (torque: Vec3) {
-        if (this._assertOnLoadCalled) {
-            this._body!.applyTorque(torque);
-        }
+    public applyTorque (torque: Vec3): void {
+        if (this._isInitialized) this._body!.applyTorque(torque);
     }
 
     /**
      * @zh
      * 在本地空间中，对刚体施加扭矩。
-     * @param torque - 扭矩
+     * @zh
+     * In local space, torque is applied to the rigid body.
+     * @param torque @zh 扭矩 @en The torque applied
      */
-    public applyLocalTorque (torque: Vec3) {
-        if (this._assertOnLoadCalled) {
-            this._body!.applyLocalTorque(torque);
-        }
+    public applyLocalTorque (torque: Vec3): void {
+        if (this._isInitialized) this._body!.applyLocalTorque(torque);
     }
 
     /**
@@ -528,10 +505,8 @@ export class RigidBody extends Component {
      * @zh
      * 唤醒刚体。
      */
-    public wakeUp () {
-        if (this._assertOnLoadCalled) {
-            this._body!.wakeUp();
-        }
+    public wakeUp (): void {
+        if (this._isInitialized) this._body!.wakeUp();
     }
 
     /**
@@ -540,10 +515,8 @@ export class RigidBody extends Component {
      * @zh
      * 休眠刚体。
      */
-    public sleep () {
-        if (this._assertOnLoadCalled) {
-            this._body!.sleep();
-        }
+    public sleep (): void {
+        if (this._isInitialized) this._body!.sleep();
     }
 
     /**
@@ -552,10 +525,8 @@ export class RigidBody extends Component {
      * @zh
      * 清除刚体受到的力和速度。
      */
-    public clearState () {
-        if (this._assertOnLoadCalled) {
-            this._body!.clearState();
-        }
+    public clearState (): void {
+        if (this._isInitialized) this._body!.clearState();
     }
 
     /**
@@ -564,10 +535,8 @@ export class RigidBody extends Component {
      * @zh
      * 清除刚体受到的力。
      */
-    public clearForces () {
-        if (this._assertOnLoadCalled) {
-            this._body!.clearForces();
-        }
+    public clearForces (): void {
+        if (this._isInitialized) this._body!.clearForces();
     }
 
     /**
@@ -576,10 +545,8 @@ export class RigidBody extends Component {
      * @zh
      * 清除刚体的速度。
      */
-    public clearVelocity () {
-        if (this._assertOnLoadCalled) {
-            this._body!.clearVelocity();
-        }
+    public clearVelocity (): void {
+        if (this._isInitialized) this._body!.clearVelocity();
     }
 
     /**
@@ -587,12 +554,10 @@ export class RigidBody extends Component {
      * Gets the linear velocity.
      * @zh
      * 获取线性速度。
-     * @param out 速度 Vec3
+     * @param out @zh 速度向量 @en The velocity vector
      */
-    public getLinearVelocity (out: Vec3) {
-        if (this._assertOnLoadCalled) {
-            this._body!.getLinearVelocity(out);
-        }
+    public getLinearVelocity (out: Vec3): void {
+        if (this._isInitialized) this._body!.getLinearVelocity(out);
     }
 
     /**
@@ -600,12 +565,10 @@ export class RigidBody extends Component {
      * Sets the linear velocity.
      * @zh
      * 设置线性速度。
-     * @param value 速度 Vec3
+     * @param value @zh 速度向量 @en The velocity vector
      */
     public setLinearVelocity (value: Vec3): void {
-        if (this._assertOnLoadCalled) {
-            this._body!.setLinearVelocity(value);
-        }
+        if (this._isInitialized) this._body!.setLinearVelocity(value);
     }
 
     /**
@@ -613,12 +576,10 @@ export class RigidBody extends Component {
      * Gets the angular velocity.
      * @zh
      * 获取旋转速度。
-     * @param out 速度 Vec3
+     * @param out @zh 角速度向量 @en The angular velocity vector
      */
-    public getAngularVelocity (out: Vec3) {
-        if (this._assertOnLoadCalled) {
-            this._body!.getAngularVelocity(out);
-        }
+    public getAngularVelocity (out: Vec3): void {
+        if (this._isInitialized) this._body!.getAngularVelocity(out);
     }
 
     /**
@@ -626,12 +587,10 @@ export class RigidBody extends Component {
      * Sets the angular velocity.
      * @zh
      * 设置旋转速度。
-     * @param value 速度 Vec3
+     * @param value @zh 角速度向量 @en The angular velocity vector
      */
     public setAngularVelocity (value: Vec3): void {
-        if (this._assertOnLoadCalled) {
-            this._body!.setAngularVelocity(value);
-        }
+        if (this._isInitialized) this._body!.setAngularVelocity(value);
     }
 
     /// GROUP MASK ///
@@ -641,12 +600,10 @@ export class RigidBody extends Component {
      * Gets the group value.
      * @zh
      * 获取分组值。
-     * @returns 整数，范围为 2 的 0 次方 到 2 的 31 次方
+     * @returns @zh 分组值，为 32 位整数，范围为 [2^0, 2^31] @en Group value which is a 32-bits integer, the range is [2^0, 2^31]
      */
     public getGroup (): number {
-        if (this._assertOnLoadCalled) {
-            return this._body!.getGroup();
-        }
+        if (this._isInitialized) return this._body!.getGroup();
         return 0;
     }
 
@@ -655,12 +612,10 @@ export class RigidBody extends Component {
      * Sets the group value.
      * @zh
      * 设置分组值。
-     * @param v - 整数，范围为 2 的 0 次方 到 2 的 31 次方
+     * @param v @zh 分组值，为 32 位整数，范围为 [2^0, 2^31] @en Group value which is a 32-bits integer, the range is [2^0, 2^31]
      */
     public setGroup (v: number): void {
-        if (this._assertOnLoadCalled) {
-            this._body!.setGroup(v);
-        }
+        if (this._isInitialized) this._body!.setGroup(v);
     }
 
     /**
@@ -668,12 +623,10 @@ export class RigidBody extends Component {
      * Add a grouping value to fill in the group you want to join.
      * @zh
      * 添加分组值，可填要加入的 group。
-     * @param v - 整数，范围为 2 的 0 次方 到 2 的 31 次方
+     * @param v @zh 分组值，为 32 位整数，范围为 [2^0, 2^31] @en Group value which is a 32-bits integer, the range is [2^0, 2^31]
      */
-    public addGroup (v: number) {
-        if (this._assertOnLoadCalled) {
-            this._body!.addGroup(v);
-        }
+    public addGroup (v: number): void {
+        if (this._isInitialized) this._body!.addGroup(v);
     }
 
     /**
@@ -681,12 +634,10 @@ export class RigidBody extends Component {
      * Subtract the grouping value to fill in the group to be removed.
      * @zh
      * 减去分组值，可填要移除的 group。
-     * @param v - 整数，范围为 2 的 0 次方 到 2 的 31 次方
+     * @param v @zh 分组值，为 32 位整数，范围为 [2^0, 2^31] @en Group value which is a 32-bits integer, the range is [2^0, 2^31]
      */
-    public removeGroup (v: number) {
-        if (this._assertOnLoadCalled) {
-            this._body!.removeGroup(v);
-        }
+    public removeGroup (v: number): void {
+        if (this._isInitialized) this._body!.removeGroup(v);
     }
 
     /**
@@ -694,12 +645,10 @@ export class RigidBody extends Component {
      * Gets the mask value.
      * @zh
      * 获取掩码值。
-     * @returns 整数，范围为 2 的 0 次方 到 2 的 31 次方
+     * @returns {number} @zh 掩码值，为 32 位整数，范围为 [2^0, 2^31] @en Mask value which is a 32-bits integer, the range is [2^0, 2^31]
      */
     public getMask (): number {
-        if (this._assertOnLoadCalled) {
-            return this._body!.getMask();
-        }
+        if (this._isInitialized) return this._body!.getMask();
         return 0;
     }
 
@@ -708,12 +657,10 @@ export class RigidBody extends Component {
      * Sets the mask value.
      * @zh
      * 设置掩码值。
-     * @param v - 整数，范围为 2 的 0 次方 到 2 的 31 次方
+     * @param v @zh 掩码值，为 32 位整数，范围为 [2^0, 2^31] @en Mask value which is a 32-bits integer, the range is [2^0, 2^31]
      */
-    public setMask (v: number) {
-        if (this._assertOnLoadCalled) {
-            this._body!.setMask(v);
-        }
+    public setMask (v: number): void {
+        if (this._isInitialized) this._body!.setMask(v);
     }
 
     /**
@@ -721,12 +668,10 @@ export class RigidBody extends Component {
      * Add mask values to fill in groups that need to be checked.
      * @zh
      * 添加掩码值，可填入需要检查的 group。
-     * @param v - 整数，范围为 2 的 0 次方 到 2 的 31 次方
+     * @param v @zh 掩码值，为 32 位整数，范围为 [2^0, 2^31] @en Mask value which is a 32-bits integer, the range is [2^0, 2^31]
      */
-    public addMask (v: number) {
-        if (this._assertOnLoadCalled) {
-            this._body!.addMask(v);
-        }
+    public addMask (v: number): void {
+        if (this._isInitialized) this._body!.addMask(v);
     }
 
     /**
@@ -734,14 +679,14 @@ export class RigidBody extends Component {
      * Subtract the mask value to fill in the group that does not need to be checked.
      * @zh
      * 减去掩码值，可填入不需要检查的 group。
-     * @param v - 整数，范围为 2 的 0 次方 到 2 的 31 次方
+     * @param v @zh 掩码值，为 32 位整数，范围为 [2^0, 2^31] @en Mask value which is a 32-bits integer, the range is [2^0, 2^31]
      */
-    public removeMask (v: number) {
-        if (this._assertOnLoadCalled) {
-            this._body!.removeMask(v);
-        }
+    public removeMask (v: number): void {
+        if (this._isInitialized) this._body!.removeMask(v);
     }
 }
+
+function isDynamicBody (this: RigidBody): boolean { return this.isDynamic; }
 
 export namespace RigidBody {
     export type Type = EnumAlias<typeof ERigidBodyType>;

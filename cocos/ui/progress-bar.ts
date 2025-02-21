@@ -1,19 +1,18 @@
 /*
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -24,19 +23,14 @@
  THE SOFTWARE.
 */
 
-/**
- * @packageDocumentation
- * @module ui
- */
-
 import { ccclass, help, executionOrder, menu, requireComponent, tooltip, type, range, slide, serializable } from 'cc.decorator';
-import { Component } from '../core/components/component';
+import { Component } from '../scene-graph/component';
 import { UITransform } from '../2d/framework';
 import { Size, Vec2, Vec3 } from '../core/math';
 import { Enum } from '../core/value-types';
 import { clamp01 } from '../core/math/utils';
 import { Sprite } from '../2d/components/sprite';
-import { warn } from '../core/platform/debug';
+import { warnID } from '../core/platform/debug';
 import { legacyCC } from '../core/global-exports';
 
 /**
@@ -106,6 +100,10 @@ Enum(Mode);
 @requireComponent(UITransform)
 // @executeInEditMode
 export class ProgressBar extends Component {
+    constructor () {
+        super();
+    }
+
     /**
      * @en
      * The targeted Sprite which will be changed progressively.
@@ -115,7 +113,7 @@ export class ProgressBar extends Component {
      */
     @type(Sprite)
     @tooltip('i18n:progress.bar_sprite')
-    get barSprite () {
+    get barSprite (): Sprite | null {
         return this._barSprite;
     }
 
@@ -137,7 +135,7 @@ export class ProgressBar extends Component {
      */
     @type(Mode)
     @tooltip('i18n:progress.mode')
-    get mode () {
+    get mode (): Mode {
         return this._mode;
     }
 
@@ -151,7 +149,7 @@ export class ProgressBar extends Component {
             const entity = this._barSprite.node;
             if (!entity) { return; }
 
-            const entitySize = entity._uiProps.uiTransformComp!.contentSize;
+            const entitySize = entity._getUITransformComp()!.contentSize;
             if (this._mode === Mode.HORIZONTAL) {
                 this.totalLength = entitySize.width;
             } else if (this._mode === Mode.VERTICAL) {
@@ -170,7 +168,7 @@ export class ProgressBar extends Component {
      * 进度条实际的总长度。
      */
     @tooltip('i18n:progress.total_length')
-    get totalLength () {
+    get totalLength (): number {
         return this._totalLength;
     }
 
@@ -178,6 +176,11 @@ export class ProgressBar extends Component {
         if (this._mode === Mode.FILLED) {
             value = clamp01(value);
         }
+
+        if (this._totalLength === value) {
+            return;
+        }
+
         this._totalLength = value;
         this._updateBarStatus();
     }
@@ -192,7 +195,7 @@ export class ProgressBar extends Component {
     @range([0, 1, 0.1])
     @slide
     @tooltip('i18n:progress.progress')
-    get progress () {
+    get progress (): number {
         return this._progress;
     }
 
@@ -213,7 +216,7 @@ export class ProgressBar extends Component {
      * 进度条是否进行反方向变化。
      */
     @tooltip('i18n:progress.reverse')
-    get reverse () {
+    get reverse (): boolean {
         return this._reverse;
     }
 
@@ -241,16 +244,20 @@ export class ProgressBar extends Component {
     @serializable
     protected _reverse = false;
 
-    protected _initBarSprite () {
+    protected onLoad (): void {
+        this._updateBarStatus();
+    }
+
+    protected _initBarSprite (): void {
         if (this._barSprite) {
             const entity = this._barSprite.node;
             if (!entity) { return; }
 
-            const trans = this.node._uiProps.uiTransformComp!;
+            const trans = this.node._getUITransformComp()!;
             const nodeSize = trans.contentSize;
             const nodeAnchor = trans.anchorPoint;
 
-            const barSpriteSize = entity._uiProps.uiTransformComp!.contentSize;
+            const barSpriteSize = entity._getUITransformComp()!.contentSize;
 
             // if (entity.parent === this.node) {
             //     this.node.setContentSize(barSpriteSize);
@@ -275,16 +282,15 @@ export class ProgressBar extends Component {
         }
     }
 
-    protected _updateBarStatus () {
+    protected _updateBarStatus (): void {
         if (this._barSprite) {
             const entity = this._barSprite.node;
 
             if (!entity) { return; }
 
-            const entTrans = entity._uiProps.uiTransformComp!;
+            const entTrans = entity._getUITransformComp()!;
             const entityAnchorPoint = entTrans.anchorPoint;
             const entitySize = entTrans.contentSize;
-            const entityPosition = entity.getPosition();
 
             let anchorPoint = new Vec2(0, 0.5);
             const progress = clamp01(this._progress);
@@ -320,7 +326,7 @@ export class ProgressBar extends Component {
             // handling filled mode
             if (this._mode === Mode.FILLED) {
                 if (this._barSprite.type !== Sprite.Type.FILLED) {
-                    warn('ProgressBar FILLED mode only works when barSprite\'s Type is FILLED!');
+                    warnID(16397);
                 } else {
                     if (this._reverse) {
                         actualLenth *= -1;
@@ -330,15 +336,18 @@ export class ProgressBar extends Component {
             } else if (this._barSprite.type !== Sprite.Type.FILLED) {
                 const anchorOffsetX = anchorPoint.x - entityAnchorPoint.x;
                 const anchorOffsetY = anchorPoint.y - entityAnchorPoint.y;
-                const finalPosition = new Vec3(totalWidth * anchorOffsetX, totalHeight * anchorOffsetY, 0);
 
-                entity.setPosition(entityPosition.x + finalPosition.x, entityPosition.y + finalPosition.y, entityPosition.z);
+                const finalPosition = new Vec3(entity.position);
+                finalPosition.add3f(totalWidth * anchorOffsetX, totalHeight * anchorOffsetY, 0);
+                entity.setPosition(finalPosition);
 
                 entTrans.setAnchorPoint(anchorPoint);
                 entTrans.setContentSize(finalContentSize);
             } else {
-                warn('ProgressBar non-FILLED mode only works when barSprite\'s Type is non-FILLED!');
+                warnID(16398);
             }
         }
     }
 }
+
+legacyCC.ProgressBar = ProgressBar;

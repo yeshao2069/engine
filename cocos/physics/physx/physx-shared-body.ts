@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,29 +20,25 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-
-/**
- * @packageDocumentation
- * @hidden
- */
+*/
 
 /* eslint-disable @typescript-eslint/no-unsafe-return */
-import { Node, Quat, Vec3 } from '../../core';
+import { Vec3, js } from '../../core';
 import { PhysXRigidBody } from './physx-rigid-body';
 import { PhysXWorld } from './physx-world';
+import { PhysXInstance } from './physx-instance';
 import { PhysXShape } from './shapes/physx-shape';
-import { TransformBit } from '../../core/scene-graph/node-enum';
+import { TransformBit } from '../../scene-graph/node-enum';
 import {
-    addActorToScene, copyPhysXTransform, getJsTransform, getTempTransform, physXEqualsCocosQuat,
+    addActorToScene, syncNoneStaticToSceneIfWaking, getJsTransform, getTempTransform, physXEqualsCocosQuat,
     physXEqualsCocosVec3, PX, setMassAndUpdateInertia,
-} from './export-physx';
-import { VEC3_0 } from '../utils/util';
+} from './physx-adapter';
 import { ERigidBodyType, PhysicsSystem } from '../framework';
 import { PhysXJoint } from './joints/physx-joint';
 import { PhysicsGroup } from '../framework/physics-enum';
-import { fastRemoveAt } from '../../core/utils/array';
+import { Node } from '../../scene-graph';
 
+/** @mangle */
 export class PhysXSharedBody {
     private static idCounter = 0;
     private static readonly sharedBodesMap = new Map<string, PhysXSharedBody>();
@@ -61,7 +56,7 @@ export class PhysXSharedBody {
         }
         if (wrappedBody) {
             newSB._wrappedBody = wrappedBody;
-            const g = (wrappedBody.rigidBody as any)._group;
+            const g = wrappedBody.rigidBody.group;
             const m = PhysicsSystem.instance.collisionMatrix[g];
             newSB.filterData.word0 = g;
             newSB.filterData.word1 = m;
@@ -80,8 +75,8 @@ export class PhysXSharedBody {
     get isKinematic (): boolean { return this._isKinematic; }
     get isDynamic (): boolean { return !this._isStatic && !this._isKinematic; }
     get wrappedBody (): PhysXRigidBody | null { return this._wrappedBody; }
-    get filterData () { return this._filterData; }
-    get isInScene () { return this._index !== -1; }
+    get filterData (): any { return this._filterData; }
+    get isInScene (): boolean { return this._index !== -1; }
     get impl (): any {
         this._initActor();
         return this.isStatic ? this._staticActor : this._dynamicActor;
@@ -126,7 +121,7 @@ export class PhysXSharedBody {
         this.id = PhysXSharedBody.idCounter++;
         this.node = node;
         this.wrappedWorld = wrappedWorld;
-        this._filterData = { word0: 1, word1: 1, word2: 0, word3: 0 };
+        this._filterData = { word0: 1, word1: 1, word2: 1, word3: 0 };
     }
 
     private _initActor (): void {
@@ -150,26 +145,28 @@ export class PhysXSharedBody {
         if (st !== this._isStatic) { this._switchActor(st); }
     }
 
-    private _initStaticActor () {
+    private _initStaticActor (): void {
         if (this._staticActor) return;
         const t = getTempTransform(this.node.worldPosition, this.node.worldRotation);
-        this._staticActor = this.wrappedWorld.physics.createRigidStatic(t);
+        this._staticActor = PhysXInstance.physics.createRigidStatic(t);
+        this._staticActor.setActorFlag(PX.ActorFlag.eVISUALIZATION, true);
         if (this._staticActor.$$) PX.IMPL_PTR[this._staticActor.$$.ptr] = this;
     }
 
-    private _initDynamicActor () {
+    private _initDynamicActor (): void {
         if (this._dynamicActor) return;
         const t = getTempTransform(this.node.worldPosition, this.node.worldRotation);
-        this._dynamicActor = this.wrappedWorld.physics.createRigidDynamic(t);
+        this._dynamicActor = PhysXInstance.physics.createRigidDynamic(t);
         if (this._dynamicActor.$$) PX.IMPL_PTR[this._dynamicActor.$$.ptr] = this;
         const wb = this.wrappedBody;
         if (wb) {
             const rb = wb.rigidBody;
             this._dynamicActor.setMass(rb.mass);
+            this._dynamicActor.setActorFlag(PX.ActorFlag.eVISUALIZATION, true);
             this._dynamicActor.setActorFlag(PX.ActorFlag.eDISABLE_GRAVITY, !rb.useGravity);
+            this.setLinearDamping(rb.linearDamping);
+            this.setAngularDamping(rb.angularDamping);
             this.setRigidBodyFlag(PX.RigidBodyFlag.eKINEMATIC, rb.isKinematic);
-            this._dynamicActor.setLinearDamping(rb.linearDamping);
-            this._dynamicActor.setAngularDamping(rb.angularDamping);
             const lf = rb.linearFactor;
             this._dynamicActor.setRigidDynamicLockFlag(PX.RigidDynamicLockFlag.eLOCK_LINEAR_X, !lf.x);
             this._dynamicActor.setRigidDynamicLockFlag(PX.RigidDynamicLockFlag.eLOCK_LINEAR_Y, !lf.y);
@@ -181,7 +178,7 @@ export class PhysXSharedBody {
         }
     }
 
-    private _switchActor (isStaticBefore: boolean) {
+    private _switchActor (isStaticBefore: boolean): void {
         if (!this._staticActor || !this._dynamicActor) return;
         const a0 = isStaticBefore ? this._staticActor : this._dynamicActor;
         const a1 = !isStaticBefore ? this._staticActor : this._dynamicActor;
@@ -197,13 +194,6 @@ export class PhysXSharedBody {
         if (isStaticBefore) {
             const da = this._dynamicActor;
             setMassAndUpdateInertia(da, this._wrappedBody!.rigidBody.mass);
-            const center = VEC3_0;
-            center.set(0, 0, 0);
-            for (let i = 0; i < this.wrappedShapes.length; i++) {
-                const collider = this.wrappedShapes[i].collider;
-                if (!collider.isTrigger) center.subtract(collider.center);
-            }
-            da.setCMassLocalPose(getTempTransform(center, Quat.IDENTITY));
         }
     }
 
@@ -215,7 +205,6 @@ export class PhysXSharedBody {
             this.impl.attachShape(ws.impl);
             this.wrappedShapes.push(ws);
             if (!ws.collider.isTrigger) {
-                if (!Vec3.strictEquals(ws.collider.center, Vec3.ZERO)) this.updateCenterOfMass();
                 if (this.isDynamic) setMassAndUpdateInertia(this.impl, this._wrappedBody!.rigidBody.mass);
             }
         }
@@ -226,15 +215,14 @@ export class PhysXSharedBody {
         if (index >= 0) {
             ws.setIndex(-1);
             this.impl.detachShape(ws.impl, true);
-            fastRemoveAt(this.wrappedShapes, index);
+            js.array.fastRemoveAt(this.wrappedShapes, index);
             if (!ws.collider.isTrigger) {
-                if (!Vec3.strictEquals(ws.collider.center, Vec3.ZERO)) this.updateCenterOfMass();
                 if (this.isDynamic) setMassAndUpdateInertia(this.impl, this._wrappedBody!.rigidBody.mass);
             }
         }
     }
 
-    addJoint (v: PhysXJoint, type: 0 | 1) {
+    addJoint (v: PhysXJoint, type: 0 | 1): void {
         if (type) {
             const i = this.wrappedJoints1.indexOf(v);
             if (i < 0) this.wrappedJoints1.push(v);
@@ -244,14 +232,26 @@ export class PhysXSharedBody {
         }
     }
 
-    removeJoint (v: PhysXJoint, type: 0 | 1) {
+    removeJoint (v: PhysXJoint, type: 0 | 1): void {
         if (type) {
             const i = this.wrappedJoints1.indexOf(v);
-            if (i >= 0) fastRemoveAt(this.wrappedJoints1, i);
+            if (i >= 0) js.array.fastRemoveAt(this.wrappedJoints1, i);
         } else {
             const i = this.wrappedJoints0.indexOf(v);
-            if (i >= 0) fastRemoveAt(this.wrappedJoints0, i);
+            if (i >= 0) js.array.fastRemoveAt(this.wrappedJoints0, i);
         }
+    }
+
+    setLinearDamping (linDamp: number): void {
+        if (!this._dynamicActor) return;
+        const dt = PhysicsSystem.instance.fixedTimeStep;
+        this._dynamicActor.setLinearDamping((1 - (1 - linDamp) ** dt) / dt);
+    }
+
+    setAngularDamping (angDamp: number): void {
+        if (!this._dynamicActor) return;
+        const dt = PhysicsSystem.instance.fixedTimeStep;
+        this._dynamicActor.setAngularDamping((1 - (1 - angDamp) ** dt) / dt);
     }
 
     setMass (v: number): void {
@@ -283,10 +283,11 @@ export class PhysXSharedBody {
         const node = this.node;
         if (node.hasChangedFlags) {
             if (node.hasChangedFlags & TransformBit.SCALE) this.syncScale();
-            const trans = getJsTransform(node.worldPosition, node.worldRotation);
             if (this._isKinematic) {
+                const trans = getTempTransform(node.worldPosition, node.worldRotation);
                 this.impl.setKinematicTarget(trans);
             } else {
+                const trans = getJsTransform(node.worldPosition, node.worldRotation);
                 this.impl.setGlobalPose(trans, true);
             }
         }
@@ -301,10 +302,11 @@ export class PhysXSharedBody {
             const pose = this.impl.getGlobalPose();
             const dontUpdate = physXEqualsCocosVec3(pose, wp) && physXEqualsCocosQuat(pose, wr);
             if (!dontUpdate) {
-                const trans = getJsTransform(node.worldPosition, node.worldRotation);
                 if (this._isKinematic) {
+                    const trans = getTempTransform(node.worldPosition, node.worldRotation);
                     this.impl.setKinematicTarget(trans);
                 } else {
+                    const trans = getJsTransform(node.worldPosition, node.worldRotation);
                     this.impl.setGlobalPose(trans, true);
                 }
             }
@@ -312,12 +314,11 @@ export class PhysXSharedBody {
     }
 
     syncPhysicsToScene (): void {
-        if (this._isStatic || this._dynamicActor.isSleeping()) return;
-        const transform = this._dynamicActor.getGlobalPose();
-        copyPhysXTransform(this.node, transform);
+        if (!this.isDynamic) return;
+        syncNoneStaticToSceneIfWaking(this._dynamicActor, this.node);
     }
 
-    syncScale () {
+    syncScale (): void {
         for (let i = 0; i < this.wrappedShapes.length; i++) {
             this.wrappedShapes[i].updateScale();
         }
@@ -330,6 +331,7 @@ export class PhysXSharedBody {
     }
 
     setGroup (v: number): void {
+        v >>>= 0; //convert to unsigned int(32bit) for physx
         this._filterData.word0 = v;
         this.updateFilterData();
     }
@@ -339,17 +341,19 @@ export class PhysXSharedBody {
     }
 
     addGroup (v: number): void {
+        v >>>= 0; //convert to unsigned int(32bit) for physx
         this._filterData.word0 |= v;
         this.updateFilterData();
     }
 
     removeGroup (v: number): void {
+        v >>>= 0; //convert to unsigned int(32bit) for physx
         this._filterData.word0 &= ~v;
         this.updateFilterData();
     }
 
     setMask (v: number): void {
-        if (v === -1) v = 0xffffffff;
+        v >>>= 0; //convert to unsigned int(32bit) for physx
         this._filterData.word1 = v;
         this.updateFilterData();
     }
@@ -359,11 +363,13 @@ export class PhysXSharedBody {
     }
 
     addMask (v: number): void {
+        v >>>= 0; //convert to unsigned int(32bit) for physx
         this._filterData.word1 |= v;
         this.updateFilterData();
     }
 
     removeMask (v: number): void {
+        v >>>= 0; //convert to unsigned int(32bit) for physx
         this._filterData.word1 &= ~v;
         this.updateFilterData();
     }
@@ -372,18 +378,6 @@ export class PhysXSharedBody {
         for (let i = 0; i < this.wrappedShapes.length; i++) {
             this.wrappedShapes[i].updateFilterData(this._filterData);
         }
-    }
-
-    updateCenterOfMass (): void {
-        this._initActor();
-        if (this._isStatic) return;
-        const center = VEC3_0;
-        center.set(0, 0, 0);
-        for (let i = 0; i < this.wrappedShapes.length; i++) {
-            const collider = this.wrappedShapes[i].collider;
-            if (!collider.isTrigger) center.subtract(collider.center);
-        }
-        this.impl.setCMassLocalPose(getTempTransform(center, Quat.IDENTITY));
     }
 
     clearForces (): void {

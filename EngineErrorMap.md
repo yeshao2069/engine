@@ -40,18 +40,15 @@ cocos2d : getActionByTag(tag = %s): Action not found
 
 ### 1006
 
-<!-- DEPRECATED -->
 [Action step]. override me
 
 ### 1007
 
-<!-- DEPRECATED -->
 [Action update]. override me
 
 ### 1008
 
-<!-- DEPRECATED -->
-cocos2d: FiniteTimeAction#reverse: Implement me
+[Action reverse]. override me
 
 ### 1009
 
@@ -163,6 +160,10 @@ cc.ReverseTime.initWithAction(): the action was already passed in.
 <!-- DEPRECATED -->
 cc.Animate.initWithAnimation(): animation must be non-NULL
 
+### 1031
+
+Set `setter` to boolean is deprecated. Please don not use like this again.
+
 ### 1100
 
 Expected 'data' dict, but not found. Config file: %s
@@ -170,6 +171,14 @@ Expected 'data' dict, but not found. Config file: %s
 ### 1101
 
 Please load the resource first : %s
+
+### 1102
+
+Effect settings not found, effects will not be imported.
+
+### 1103
+
+Success to load scene: %s
 
 ### 1200
 
@@ -245,6 +254,30 @@ Director.runSceneImmediate: scene is not valid
 ### 1217
 
 Director._initOnEngineInitialized: renderer root initialization failed
+
+### 1218
+
+Forward render pipeline initialized.
+
+### 1219
+
+Deferred render pipeline initialized. Note that non-transparent materials with no lighting will not be rendered, such as builtin-unlit.
+
+### 1220
+
+Failed to set shading scale, pipelineSceneData is invalid.
+
+### 1221
+
+Setting orientation is not supported yet.
+
+### 1222
+
+Failed to initialize render pipeline.
+
+### 1223
+
+Custom pipeline and legacy pipeline are all culled. 
 
 ### 1300
 
@@ -353,6 +386,10 @@ cc.Scheduler: updateFunc parameter is deprecated in scheduleUpdate function, and
 ### 1513
 
 cc.Scheduler: scheduler stopped using `__instanceId` as id since v2.0, you should do Scheduler.enableForTarget(target) before all scheduler API usage on target
+
+### 1514
+
+since v3.8.0, `Scheduler.schedule(target, callback, interval)` is deprecated, please use `Scheduler.schedule(callback, target, interval)` instead.
 
 ### 1600
 
@@ -540,6 +577,10 @@ Private node's zIndex can't be set, it will keep cc.macro.MIN_ZINDEX as its valu
 <!-- DEPRECATED -->
 cc.Action is deprecated, please use cc.Tween instead
 
+### 1640
+
+Node %s(%s) has not attached to a scene.
+
 ### 1700
 
 <!-- DEPRECATED -->
@@ -604,6 +645,10 @@ Invalid index in MultiplexLayer switchTo message
 <!-- DEPRECATED -->
 cc.Layer.addLayer(): layer should be non-null
 
+### 2104
+
+Layer collision. The name of layer (%s) is collided with the name or value of some layer
+
 ### 2200
 
 Design resolution not valid
@@ -614,7 +659,15 @@ should set resolutionPolicy
 
 ### 2300
 
-The touches is more than MAX_TOUCHES, nUnusedIndex = %s
+The touches is more than MAX_TOUCHES.
+
+### 2301
+
+Cannot create the same touch object.
+
+### 2302
+
+The touches is more than MAX_TOUCHES, release touch id %s.
 
 ### 2400
 
@@ -1176,6 +1229,18 @@ Loading texture with unsupported type: '%s'. Add '%s' into 'cc.macro.SUPPORT_TEX
 
 Can't find a texture format supported by the current platform! Please add a fallback format in the editor.
 
+### 3122
+
+Error Texture in %s.
+
+### 3123
+
+Set same texture %s.
+
+### 3124
+
+Texture: setMipRange failed because base level is larger than max level
+
 ### 3200
 
 <!-- DEPRECATED -->
@@ -1469,7 +1534,7 @@ CCClass %s have conflict between its ctor and __ctor__.
 ### 3650
 
 <!-- DEPRECATED -->
-No need to specifiy "%s" attribute for "%s" property in "%s" class.
+No need to specify "%s" attribute for "%s" property in "%s" class.
 
 ### 3651
 
@@ -1484,7 +1549,7 @@ Please ensure the constructor can be called during the script's initialization.
 
 ### 3653
 
-Please do not specifiy "default" attribute in decorator of "%s" property in "%s" class.
+Please do not specify "default" attribute in decorator of "%s" property in "%s" class.
 Default value must be initialized at their declaration:
 
 ```
@@ -1503,7 +1568,7 @@ myProp = null;   // <--
 
 ### 3654
 
-Please specifiy a default value for "%s.%s" property at its declaration:
+Please specify a default value for "%s.%s" property at its declaration:
 
 ```
 // Before:
@@ -1516,7 +1581,7 @@ myProp = 0;
 
 ### 3655
 
-Can not specifiy "get" or "set"  attribute in decorator for "%s" property in "%s" class.
+Can not specify "get" or "set"  attribute in decorator for "%s" property in "%s" class.
 Please use:
 
 ```
@@ -1591,6 +1656,10 @@ internal error: _prefab is undefined
 ### 3701
 
 Failed to load prefab asset for node '%s'
+
+### 3702
+
+The json file of asset %s is empty or missing.
 
 ### 3800
 
@@ -1684,6 +1753,10 @@ Cannot change hierarchy while activating or deactivating the parent.
 
 addComponent: Cannot add any component to the scene.
 
+### 3823
+
+The enabled component (id: %s, name: %s) doesn't have a valid node
+
 ### 3900
 
 Invalid clip to add
@@ -1714,7 +1787,7 @@ Can't find easing type [%s]
 
 ### 3907
 
-animator not added or already removed
+Animation state is not playing or already removed
 
 ### 3908
 
@@ -1739,6 +1812,94 @@ animation not added or already removed
 ### 3912
 
 already-playing
+
+### 3920
+
+Current context does not allow root motion.
+
+### 3921
+
+You provided a ill-formed track path. The last component of track path should be property key, or the setter should not be empty.
+
+### 3923
+
+Root motion is ignored since root bone could not be located in animation.
+
+### 3924
+
+Root motion is ignored since the root bone could not be located in scene.
+
+### 3925
+
+Target of hierarchy path should be of type Node.
+
+### 3926
+
+Node "%s" has no path "%s".
+
+### 3927
+
+Target of component path should be of type Node.
+
+### 3928
+
+Node "%s" has no component "%s".
+
+### 3929
+
+Target object has no property "%s".
+
+### 3930
+
+Can not decide type for untyped track: runtime binding does not provide a getter.
+
+### 3931
+
+Can not decide type for untyped track: got a unsupported value from runtime binding.
+
+### 3932
+
+Common targets should only target Vectors/`Size`/`Color`.
+
+### 3933
+
+Each curve that has common target should be numeric curve and targets string property.
+
+### 3934
+
+Misconfigured legacy curve: the first keyframe value is number but others aren't.
+
+### 3935
+
+We don't currently support conversion of \`CubicSplineQuatValue\`.
+
+### 3936
+
+Instancing/Batching enabled for non-baked skinning model '%s', this may result in unexpected rendering artifacts. Consider turning it off in the material if you do not intend to do this.
+
+### 3937
+
+Previous error occurred when instantiating animation clip %s on node %s.
+
+### 3938
+
+'%s' is not found from '%s'. It's specified as the root node to play animation clip '%s'.
+
+### 3940
+
+Error when animation attempted to bind material uniform target: target %s is not a material.
+
+### 3941
+
+Error when animation attempted to bind material uniform target: material %s has no recorded pass %s.
+
+### 3942
+
+Error when animation attempted to bind material uniform target: material %s at pass %s has no recorded uniform %s.
+
+### 3943
+
+Error when animation attempted to bind material uniform target: material %s at pass %s's uniform %s has no recorded channel %s.
 
 ### 4000
 
@@ -1834,6 +1995,10 @@ Can not add a page without UITransform.
 
 Can not set the scroll view content when it hasn't UITransform or its parent hasn't UITransform.
 
+### 4303
+
+The %s scrollBar on the '%s' node is not available, please check it.
+
 ### 4400
 
 Invalid RichText img tag! The sprite frame name can't be found in the ImageAtlas!
@@ -1842,9 +2007,17 @@ Invalid RichText img tag! The sprite frame name can't be found in the ImageAtlas
 
 Graphics: There is no model in %s.
 
+### 4501
+
+Graphics feature is not enabled in 'Project Settings -> Feature Cropping', %s
+
 ### 4600
 
 Script attached to '%s' is missing or invalid.
+
+### 4601
+
+Failed to load wasm module, WebAssembly is not supported on this platform, but as a fallback Asm.js module is culled by mistake.
 
 ### 4700
 
@@ -2033,6 +2206,14 @@ browser don't support web audio
 ### 5202
 
 This feature supports WebGL render mode only.
+
+### 5203
+
+Audio buffer cache %s has not been added.
+
+### 5204
+
+Audio buffer %s has been cached.
 
 ### 5300
 
@@ -2354,6 +2535,22 @@ cc.ParticleSystem: unknown image format with Data
 ### 6032
 
 cc.ParticleSystem.initWithDictionary() : error loading the texture
+
+### 6033
+
+cc.ParticleSystem: not allowing create to be invoked twice with different particle system
+
+### 6034
+
+cc.ParticleSystem: shouldn't be initialized repetitively, otherwise there will be potential leak
+
+### 6035
+
+cc.ParticleSystem: change material failed, please use proper particle material
+
+### 6036
+
+cc.ParticleSystem: life time should bigger than 1 or buffer will be insufficient
 
 ### 6100
 
@@ -2693,6 +2890,14 @@ cc.TMXLayer.getTileFlagsAt(): TMXLayer: the tiles map has been released
 
 cc.TiledMap.initWithXML(): Map not found. Please check the filename.
 
+### 7242
+
+TiledLayer.addUserNode node has been added.
+
+### 7243
+
+TiledLayer.removeUserNode node is not exist
+
 ### 7300
 
 <!-- DEPRECATED -->
@@ -2762,6 +2967,10 @@ Spine: Animation not found: %s
 
 Spine: Animation not found: %s
 
+### 7511
+
+Spine: Invalid input!
+
 ### 7600
 
 The context of RenderTexture is invalid.
@@ -2785,6 +2994,14 @@ saveToFile isn't supported on Cocos2d-Html5
 ### 7605
 
 newCCImage isn't supported on Cocos2d-Html5
+
+### 7606
+
+GFXTexture is null
+
+### 7607
+
+readPixels buffer size smaller than %d
 
 ### 7700
 
@@ -2935,6 +3152,10 @@ Should only one camera exists, please check your project.
 
 Camera does not support Canvas Mode.
 
+### 8302
+
+Camera.viewport is deprecated, please use setViewportInOrientedSpace instead.
+
 ### 8400
 
 Wrong type arguments, 'filePath' must be a String.
@@ -2952,14 +3173,58 @@ Stencil manager does not support level bigger than %d in this device.
 
 Stencil manager is already empty, cannot pop any mask
 
+### 9002
+
+Failed to request any buffer from a mesh buffer without accessor
+
+### 9003
+
+The internal state of LinearBufferAccessor have severe issue and irreversible, please check the reason
+
+### 9004
+
+Failed to allocate chunk in StaticVBAccessor, the requested buffer might be too large: %d bytes
+
+### 9005
+
+BATCHER2D_MEM_INCREMENT is too large, the Max value for BATCHER2D_MEM_INCREMENT is 2303KB (smaller than 65536 *9* 4 / 1024 = 2304KB)
+
+### 9006
+
+QuadRenderData is removed, please use MeshRenderData instead.
+
+### 9007
+
+Since v3.6, Because mask changes the inheritance relationship, you can directly manipulate the rendering components under the same node to complete the operation.
+
+### 9008
+
+request fullscreen is not supported on this platform.
+
+### 9009
+
+exit fullscreen is not supported on this platform.
+
 ### 9100
 
 texture size exceeds current device limits %d/%d
+
+### 9101
+
+The length of the TypedArrayBuffer must be an integer.
 
 ### 9200
 
 <!-- DEPRECATED -->
 cc.view.enableAntiAlias is deprecated, please use cc.Texture2D.setFilters instead
+
+### 9201
+
+Cannot access game frame or container.
+
+### 9202
+
+Setting window size is not supported.
 
 ### 9300
 
@@ -2989,9 +3254,37 @@ Can't getGFXSampler with out device
 
 [Physics]: builtin physics system doesn't support cylinder collider
 
+### 9613
+
+[Physics]: cannon.js physics system doesn't support hinge drive and angular limit
+
 ### 9620
 
 [Physics][Ammo]: changing the mesh is not supported after the initialization is completed
+
+### 9630
+
+[Physics]: A dynamic rigid body can not have the following collider shapes: Terrain, Plane and Non-convex Mesh. Node name: %s
+
+### 9640
+
+[Physics][builtin]: sweep functions are not supported in builtin
+
+### 9641
+
+[Physics][cannon.js]: sweep functions are not supported in cannon.js
+
+### 9642
+
+[Physics] PhysicsSystem initDefaultMaterial() Failed to load builtinMaterial.
+
+### 9643
+
+[Physics] Failed to load user customized default physics material: %s, will fallback to built-in default physics material
+
+### 9644
+
+[Physics] Failed to find ear. There might be self-intersection in the polygon.
 
 ### 10001
 
@@ -3021,3 +3314,621 @@ The PrivateNode is deprecated, please use Node directly with CCObject.Flags.Dont
 ### 12004
 
 SubModel can only support %d passes.
+
+### 12005
+
+Material already initialized, request aborted.
+
+### 12006
+
+Pass already destroyed.
+
+### 12007
+
+This is old usage, please swap the parameters.
+
+### 12008
+
+GeometryRenderer: too many lines.
+
+### 12009
+
+GeometryRenderer: too many triangles.
+
+### 12010
+
+PassUtils: illegal uniform handle, accessing uniform at offset %d
+
+### 12011
+
+Pass: setUniform is invoked with incompatible uniform data type for binding %d, expected type is %s
+
+### 12012
+
+Can't set a material instance to a sharedMaterial slot
+
+### 12100
+
+The font size is too big to be fitted into texture atlas. Please switch to other label cache modes or choose a smaller font size.
+
+### 12101
+
+The asset %s has been destroyed!
+
+### 12102
+
+Base pass cannot override states, please use pass instance instead.
+
+### 12103
+
+Custom pipeline create shader %s failed. Please reimport all effects (Menu->Developer->Refresh All Effect) and restart creator.
+
+### 12104
+
+Create shader %s failed.
+
+### 12105
+
+Pass resources incomplete.
+
+### 12106
+
+Cannot patch non-builtin macros.
+
+### 12107
+
+Custom pipeline invalid render pass, program: %s. Please reimport all effects (Menu->Developer->Refresh All Effect) and restart creator.
+
+### 12108
+
+Custom pipeline invalid render phase, program: %s. Please reimport all effects (Menu->Developer->Refresh All Effect) and restart creator.
+
+### 12109
+
+custom-pipeline module not available.
+
+### 12110
+
+MaterialPass passID in legacy pipeline is wrongly initialized.
+
+### 13100
+
+Incorrect CCON magic.
+
+### 13101
+
+Unknown CCON version number: %d.
+
+### 13102
+
+CCON Format error.
+
+### 13103
+
+Can not encode CCON binary: lack of text encoder.
+
+### 13104
+
+Can not decode CCON binary: lack of text decoder.
+
+### 14000
+
+State machine matched too many transitions(greater than %s) during this frame: %s.
+
+### 14100
+
+Pool.destroy no longer take a function as parameter, Please specify destruct function in the construction of Pool instead
+
+### 14200
+
+Can not update a static mesh.
+
+### 14201
+
+The primitiveIndex is out of range.
+
+### 14202
+
+meshopt asm decoder initialized
+
+### 14203
+
+meshopt wasm decoder initialized
+
+### 14204
+
+meshopt decoder error: %d
+
+### 14300
+
+Can not keep world transform due to the zero scaling of parent node
+
+### 14400
+
+Spline error: less than 2 knots.
+
+### 14401
+
+Spline error: less than 4 knots or not a multiple of 4.
+
+<!-- Rendering algorithm reserved: 15000 - 16000 -->
+
+### 15000
+
+Can not find corresponding diffuse map for environment lighting, use hemisphere diffuse instead, change environment lighting type to regenerate diffuse map
+
+### 15001
+
+Can not find environment map, disable IBL lighting
+
+### 15002
+
+Diffuse map resource is missing, please change environment lighting type to regenerate resource
+
+### 15003
+
+The shadow visible distance is so small that CSM stratification is not effective, Please change the value of shadowDistance so that it is 10 times greater than 0.1
+
+### 15004
+
+The native folder may be generated from older versions, please refer https://docs.cocos.com/creator/manual/en/release-notes/ to upgrade.
+
+### 15100
+
+Camera '%s' clear flag is skybox, but skybox is disabled,  may cause strange background effect, please set camera clear flag to solid color.
+
+### 16000
+
+'%s' is deprecated since v%s.
+
+### 16001
+
+'%s' is deprecated since v%s, please use '%s' instead.
+
+### 16002
+
+'%s' is removed since v%s.
+
+### 16003
+
+'%s' is removed since v%s, please use '%s' instead.
+
+### 16101
+
+The effect('%s') you are looking for does not exist, please confirm the effect name in the editor. NOTE: Since 3.6, the name of the built-in effect has been changed to its name in the editor, please check it out. More information please refer to https://docs.cocos.com/creator/manual/en/shader/effect-inspector.html
+
+### 16201
+
+The asset replacing failed, can not found override asset('%s') for '%s' 
+
+### 16301
+
+node '%s' doesn't have any ModelRenderer component, this component will not work. please add ModelRenderer component first
+
+### 16302
+
+There is no reflection probe in the scene or no probe is near the current object. No reflection probe will take effect on this object. Please create a new reflection probe or move existing ones closer.
+
+### 16303
+
+Skin material needs floating-point render target, please check ENABLE_FLOAT_OUTPUT define in Project Settings--Macro
+
+### 16304
+
+Skin material may need more accurate calculations, please select a head model of standard size, check the isGlobalStandardSkinObject option in the MeshRender component.
+
+### 16305
+
+failed to stop accelerometer
+
+### 16306
+
+The data must have positions field
+
+### 16307
+
+please change type to sprite_stencil first
+
+### 16308
+
+illegal index count!
+
+### 16309
+
+Unsupported Format, convert to WebGL internal format failed.
+
+### 16310
+
+Unsupported Format, convert to WebGL format failed.
+
+### 16311
+
+Unsupported GLType, convert to GL type failed.
+
+### 16312
+
+Unsupported GLType, convert to TypedArrayConstructor failed.
+
+### 16313
+
+Unsupported GLType, convert to Type failed.
+
+### 16314
+
+Unsupported GLType, get type failed.
+
+### 16315
+
+Unsupported BufferType, create buffer failed.
+
+### 16316
+
+Unsupported BufferType, update buffer failed.
+
+### 16317
+
+Unsupported TextureType, create texture failed.
+
+### 16318
+
+glCheckFramebufferStatus() - FRAMEBUFFER_INCOMPLETE_ATTACHMENT
+
+### 16319
+
+glCheckFramebufferStatus() - FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT
+
+### 16320
+
+glCheckFramebufferStatus() - FRAMEBUFFER_INCOMPLETE_DIMENSIONS
+
+### 16321
+
+glCheckFramebufferStatus() - FRAMEBUFFER_UNSUPPORTED
+
+### 16322
+
+Unsupported ShaderType.
+
+### 16323
+
+ %s in '%s' compilation failed.
+
+### 16324
+
+Shader source dump: %s
+
+### 16325
+
+Shader '%s' compilation succeeded.
+
+### 16326
+
+Failed to link shader: %s
+
+### 16327
+
+Unsupported GL texture type, copy buffer to texture failed.
+
+### 16328
+
+Command 'draw' must be recorded inside a render pass.
+
+### 16329
+
+Command 'updateBuffer' must be recorded outside a render pass.
+
+### 16330
+
+Command 'copyBufferToTexture' must be recorded outside a render pass.
+
+### 16331
+
+InputAssemblerInfo.vertexBuffers is null.
+
+### 16332
+
+Illegal index buffer stride.
+
+### 16333
+
+This device does not support WebGL.
+
+### 16334
+
+A Class already exists with the same %s : %s. %s
+
+### 16335
+
+"%s" has already been set as name or alias of another class.
+
+### 16336
+
+"%s" has already been set as id or alias of another class.
+
+### 16337
+
+can not support canvas rendering in 3D
+
+### 16338
+
+The '_$erialized' prop in MissingScript is missing. Please contact jare.
+
+### 16339
+
+Error props: ['%s']
+
+### 16340
+
+Error when checking MissingScript 5, %s
+
+### 16341
+
+The '_$erialized' prop of MissingScript is missing. Will force the raw data to be save.
+
+### 16342
+
+Error props: ['%s']. Please contact jare.
+
+### 16343
+
+Unable to stash previously serialized data. %s
+
+### 16344
+
+Error when checking MissingScript 6, %s
+
+### 16345
+
+uniform '%s' must have a count
+
+### 16346
+
+Invalid GFX API!
+
+### 16347
+
+The number of mipmaps of each face is different.
+
+### 16348
+
+builtin UBO '%s' not available!
+
+### 16349
+
+builtin samplerTexture '%s' not available!
+
+### 16350
+
+The asset %s is missing!
+
+### 16351
+
+the native asset of %s is missing!
+
+### 16352
+
+The asset %s is invalid for some reason, detail message: %s, stack: %s
+
+### 16353
+
+Can't find letter in this bitmap-font
+
+### 16354
+
+Can't find letter definition in texture atlas %s for letter:%s
+
+### 16355
+
+Can't find letter definition in font family %s for letter: %s
+
+### 16356
+
+wrong format of version when compare version
+
+### 16357
+
+should use Vec3.multiply for vector * vector operation
+
+### 16358
+
+should use Vec3.scale for vector * scalar operation
+
+### 16359
+
+should use Vec2.multiply for vector * vector operation
+
+### 16360
+
+should use Vec2.scale for vector * scalar operation
+
+### 16361
+
+should use Vec4.multiply for vector * vector operation
+
+### 16362
+
+should use Vec4.scale for vector * scalar operation
+
+### 16363
+
+Unable to get device
+
+### 16364
+
+bitNum can't be undefined
+
+### 16365
+
+maximum layers reached.
+
+### 16366
+
+do not change buildin layers.
+
+### 16367
+
+name can't be undefined
+
+### 16368
+
+Unable to access unknown layer.
+
+### 16369
+
+unknown define type '%s'
+
+### 16370
+
+Shaders in material asset '%s' cannot be modified at runtime, please instantiate the material first.
+
+### 16371
+
+Pipeline states in material asset '%s' cannot be modified at runtime, please instantiate the material first.
+
+### 16372
+
+illegal pass index: %s.
+
+### 16373
+
+illegal property name: %s.
+
+### 16374
+
+Unexpected attribute!
+
+### 16375
+
+Unexpected: failed to create morph texture?
+
+### 16376
+
+The fnt config is not exists!
+
+### 16377
+
+SpriteAtlas is null.
+
+### 16378
+
+node '%s' doesn't have any renderable component
+
+### 16379
+
+cannot resize buffer views!
+
+### 16380
+
+cannot update through buffer views!
+
+### 16381
+
+Profiler._stats is deprecated, please use Profiler.stats instead.
+
+### 16382
+
+reverse: could not reverse a non-relative action
+
+### 16383
+
+Need 'clone' for custom prop '%s'
+
+### 16384
+
+Need 'add' for custom prop '%s'
+
+### 16385
+
+Need 'sub' for custom prop '%s' in reverse mode
+
+### 16386
+
+TweenAction: '%s' can't be converted to number
+
+### 16387
+
+Wrong return type for 'progress', number or string needed
+
+### 16388
+
+reverse: current tween could not be reversed, empty actions
+
+### 16389
+
+pause: tween wasn't started, can't pause
+
+### 16390
+
+resume: tween wasn't started, can't resume
+
+### 16391
+
+reverse: could not find action id %s
+
+### 16392
+
+Please set target to tween first
+
+### 16393
+
+start: no actions in Tween
+
+### 16394
+
+repeatForever: the last action is not ActionInterval
+
+### 16395
+
+reverseTime: the last action is not ActionInterval
+
+### 16396
+
+tweenUtil' is deprecated, please use 'tween' instead
+
+### 16397
+
+ProgressBar FILLED mode only works when barSprite's Type is FILLED!
+
+### 16398
+
+ProgressBar non-FILLED mode only works when barSprite's Type is non-FILLED!
+
+### 16399
+
+CopyTextureToBuffers: not supported texture target.
+
+### 16400
+
+Limit values to be greater than 0
+
+### 16401
+
+beginRenderPass: Only primary command buffer is supported.
+
+### 16402
+
+execute is not supported.
+
+### 16403
+
+GPU memory alias is not supported
+
+### 16404
+
+Block '%s' does not bound
+
+### 16405
+
+This device does not support WebGL2
+
+### 16406
+
+Can't find the spriteFrame of tilesets %s
+
+### 16407
+
+Spline error: invalid mode
+
+### 16408
+
+[Physics2D] b2PolygonShape failed to decompose polygon into convex polygons, node name: %s

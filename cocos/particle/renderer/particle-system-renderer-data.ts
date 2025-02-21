@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,25 +20,28 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
-import { ccclass, tooltip, displayOrder, type, serializable } from 'cc.decorator';
+import { ccclass, tooltip, displayOrder, type, serializable, disallowAnimation, visible } from 'cc.decorator';
 import { Mesh } from '../../3d';
-import { Material, Texture2D } from '../../core/assets';
-import { RenderMode } from '../enum';
+import { Material, Texture2D } from '../../asset/assets';
+import { ParticleAlignmentSpace, ParticleRenderMode } from '../enum';
 import ParticleSystemRendererCPU from './particle-system-renderer-cpu';
 import ParticleSystemRendererGPU from './particle-system-renderer-gpu';
-import { director } from '../../core/director';
-import { Device, Feature } from '../../core/gfx';
-import { legacyCC } from '../../core/global-exports';
+import { director } from '../../game/director';
+import { Device, Format, FormatFeatureBit } from '../../gfx';
+import { errorID, warnID, cclegacy } from '../../core';
 
-function isSupportGPUParticle () {
+import type { ParticleSystem } from '../particle-system';
+
+function isSupportGPUParticle (): boolean {
     const device: Device = director.root!.device;
-    if (device.capabilities.maxVertexTextureUnits >= 8 && device.hasFeature(Feature.TEXTURE_FLOAT)) {
+    if (device.capabilities.maxVertexTextureUnits >= 8 && (device.getFormatFeatures(Format.RGBA32F)
+        & (FormatFeatureBit.RENDER_TARGET | FormatFeatureBit.SAMPLED_TEXTURE))) {
         return true;
     }
 
-    legacyCC.warn('Maybe the device has restrictions on vertex textures or does not support float textures.');
+    cclegacy.warn('Maybe the device has restrictions on vertex textures or does not support float textures.');
     return false;
 }
 
@@ -48,10 +50,10 @@ export default class ParticleSystemRenderer {
     /**
      * @zh 设定粒子生成模式。
      */
-    @type(RenderMode)
+    @type(ParticleRenderMode)
     @displayOrder(0)
     @tooltip('i18n:particleSystemRenderer.renderMode')
-    public get renderMode () {
+    public get renderMode (): number {
         return this._renderMode;
     }
 
@@ -70,7 +72,7 @@ export default class ParticleSystemRenderer {
      */
     @displayOrder(1)
     @tooltip('i18n:particleSystemRenderer.velocityScale')
-    public get velocityScale () {
+    public get velocityScale (): number {
         return this._velocityScale;
     }
 
@@ -87,7 +89,7 @@ export default class ParticleSystemRenderer {
      */
     @displayOrder(2)
     @tooltip('i18n:particleSystemRenderer.lengthScale')
-    public get lengthScale () {
+    public get lengthScale (): number {
         return this._lengthScale;
     }
 
@@ -99,9 +101,9 @@ export default class ParticleSystemRenderer {
         // this._updateModel();
     }
 
-    @type(RenderMode)
+    @type(ParticleRenderMode)
     @serializable
-    private _renderMode = RenderMode.Billboard;
+    private _renderMode = ParticleRenderMode.Billboard;
 
     @serializable
     private _velocityScale = 1;
@@ -118,7 +120,7 @@ export default class ParticleSystemRenderer {
     @type(Mesh)
     @displayOrder(7)
     @tooltip('i18n:particleSystemRenderer.mesh')
-    public get mesh () {
+    public get mesh (): Mesh | null {
         return this._mesh;
     }
 
@@ -134,43 +136,99 @@ export default class ParticleSystemRenderer {
      */
     @type(Material)
     @displayOrder(8)
+    @disallowAnimation
+    @visible(false)
     @tooltip('i18n:particleSystemRenderer.particleMaterial')
-    public get particleMaterial () {
+    public get particleMaterial (): Material | null {
         if (!this._particleSystem) {
             return null;
         }
-        return this._particleSystem.getMaterial(0) as Material;
+        return this._particleSystem.getSharedMaterial(0) as Material;
     }
 
     public set particleMaterial (val: Material | null) {
         if (this._particleSystem) {
-            this._particleSystem.setMaterial(val, 0);
+            this._particleSystem.setSharedMaterial(val, 0);
         }
     }
 
     /**
+     * @en particle cpu material
+     * @zh 粒子使用的cpu材质。
+     */
+    @type(Material)
+    @displayOrder(8)
+    @disallowAnimation
+    public get cpuMaterial (): Material | null {
+        return this._cpuMaterial;
+    }
+
+    public set cpuMaterial (val: Material | null) {
+        if (val) {
+            const effectName = val.effectName;
+            if (effectName.indexOf('particle') === -1 || effectName.indexOf('particle-gpu') !== -1) {
+                warnID(6035);
+                return;
+            }
+        }
+        this._cpuMaterial = val;
+        this.particleMaterial = this._cpuMaterial;
+    }
+
+    @serializable
+    private _cpuMaterial: Material | null = null;
+
+    /**
+     * @en particle gpu material
+     * @zh 粒子使用的gpu材质。
+     */
+    @type(Material)
+    @displayOrder(8)
+    @disallowAnimation
+    public get gpuMaterial (): Material | null {
+        return this._gpuMaterial;
+    }
+
+    public set gpuMaterial (val: Material | null) {
+        if (val) {
+            const effectName = val.effectName;
+            if (effectName.indexOf('particle-gpu') === -1) {
+                warnID(6035);
+                return;
+            }
+        }
+        this._gpuMaterial = val;
+        this.particleMaterial = this._gpuMaterial;
+    }
+
+    @serializable
+    private _gpuMaterial: Material | null = null;
+
+    /**
+     * @en particle trail material
      * @zh 拖尾使用的材质。
      */
     @type(Material)
     @displayOrder(9)
+    @disallowAnimation
     @tooltip('i18n:particleSystemRenderer.trailMaterial')
-    public get trailMaterial () {
+    public get trailMaterial (): Material | null {
         if (!this._particleSystem) {
             return null;
         }
-        return this._particleSystem.getMaterial(1) as Material;
+        return this._particleSystem.getSharedMaterial(1) as Material;
     }
 
     public set trailMaterial (val: Material | null) {
         if (this._particleSystem) {
-            this._particleSystem.setMaterial(val, 1);
+            this._particleSystem.setSharedMaterial(val, 1);
         }
     }
 
     @serializable
     private _mainTexture: Texture2D | null = null;
 
-    public get mainTexture () {
+    public get mainTexture (): Texture2D | null {
         return this._mainTexture;
     }
 
@@ -183,7 +241,7 @@ export default class ParticleSystemRenderer {
 
     @displayOrder(10)
     @tooltip('i18n:particleSystemRenderer.useGPU')
-    public get useGPU () {
+    public get useGPU (): boolean {
         return this._useGPU;
     }
 
@@ -201,16 +259,61 @@ export default class ParticleSystemRenderer {
         this._switchProcessor();
     }
 
-    private _particleSystem: any = null!; // ParticleSystem
-
-    onInit (ps: any) {
-        this._particleSystem = ps;
-        const useGPU = this._useGPU && isSupportGPUParticle();
-        this._particleSystem.processor = useGPU ? new ParticleSystemRendererGPU(this) : new ParticleSystemRendererCPU(this);
-        this._particleSystem.processor.onInit(ps);
+    /**
+     * @en Particle alignment space option. Includes world, local and view.
+     * @zh 粒子对齐空间选择。包括世界空间，局部空间和视角空间。
+     */
+    @type(ParticleAlignmentSpace)
+    @displayOrder(10)
+    @tooltip('i18n:particle_system.alignSpace')
+    public get alignSpace (): number {
+        return this._alignSpace;
     }
 
-    private _switchProcessor () {
+    public set alignSpace (val: number) {
+        this._alignSpace = val;
+        this._particleSystem.processor.updateAlignSpace(this._alignSpace);
+    }
+
+    @serializable
+    private _alignSpace = ParticleAlignmentSpace.View;
+
+    public static AlignmentSpace = ParticleAlignmentSpace;
+
+    private _particleSystem: ParticleSystem = null!;
+
+    create (ps: ParticleSystem): void {
+        // if particle system is null we run the old routine
+        // else if particle system is not null we do nothing
+        if (this._particleSystem === null) {
+            this._particleSystem = ps;
+        } else if (this._particleSystem !== ps) {
+            errorID(6033);
+        }
+    }
+
+    onInit (ps: ParticleSystem): void {
+        this.create(ps);
+        const useGPU = this._useGPU && isSupportGPUParticle();
+        if (!this._particleSystem.processor) {
+            this._particleSystem.processor = useGPU ? new ParticleSystemRendererGPU(this) : new ParticleSystemRendererCPU(this);
+            this._particleSystem.processor.updateAlignSpace(this.alignSpace);
+            this._particleSystem.processor.onInit(ps);
+        } else {
+            errorID(6034);
+        }
+        if (!useGPU) {
+            if (this.particleMaterial && this.particleMaterial.effectName.indexOf('particle-gpu') !== -1) {
+                this.particleMaterial = null;
+                warnID(6035);
+            }
+            this.cpuMaterial = this.particleMaterial;
+        } else {
+            this.gpuMaterial = this.particleMaterial;
+        }
+    }
+
+    private _switchProcessor (): void {
         if (!this._particleSystem) {
             return;
         }
@@ -219,9 +322,12 @@ export default class ParticleSystemRenderer {
             this._particleSystem.processor.clear();
             this._particleSystem.processor = null!;
         }
-        this._particleSystem.processor = this._useGPU ? new ParticleSystemRendererGPU(this) : new ParticleSystemRendererCPU(this);
+        const useGPU = this._useGPU && isSupportGPUParticle();
+        this.particleMaterial = useGPU ? this.gpuMaterial : this.cpuMaterial;
+        this._particleSystem.processor = useGPU ? new ParticleSystemRendererGPU(this) : new ParticleSystemRendererCPU(this);
+        this._particleSystem.processor.updateAlignSpace(this.alignSpace);
         this._particleSystem.processor.onInit(this._particleSystem);
         this._particleSystem.processor.onEnable();
-        this._particleSystem.bindModule();
+        (this._particleSystem as any).bindModule();
     }
 }

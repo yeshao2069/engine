@@ -1,13 +1,13 @@
-const { template, $, update } = require('./base');
+const { template, $, update, close } = require('./base');
 
 exports.template = template;
 exports.$ = $;
 exports.update = update;
+exports.close = close;
 
-exports.ready = function () {
+exports.ready = function() {
     this.elements = {
         url: {
-            displayOrder: 0,
             ready(element) {
                 element.querySelector('ui-input[slot="content"]').placeholder = 'https://www.cocos.com/';
             },

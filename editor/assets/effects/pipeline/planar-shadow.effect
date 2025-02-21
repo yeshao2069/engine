@@ -25,31 +25,39 @@ CCEffect %{
 
 CCProgram planar-shadow-vs %{
   precision highp float;
-  #include <input>
-  #include <cc-global>
-  #include <cc-local-batch>
-  #include <cc-shadow>
+  #include <legacy/input>
+  #include <builtin/uniforms/cc-global>
+  #include <legacy/decode-base>
+  #include <legacy/local-batch>
+  #include <builtin/uniforms/cc-shadow>
+  #include <common/lighting/functions>
+
+  out float v_dist;
 
   vec4 vert () {
     vec4 position;
     CCVertInput(position);
-
-    mat4 matWorld;
-    CCGetWorldMatrix(matWorld);
-
-    position = cc_matProj * (cc_matView * cc_matLightPlaneProj * matWorld) * position;
-    position.z -= 0.0001;
-
+    // World Space
+    mat4 matWorld, matWorldIT;
+    CCGetWorldMatrixFull(matWorld, matWorldIT);
+    vec3 worldPos = (matWorld * position).xyz;
+    vec4 shadowPos = CalculatePlanarShadowPos(worldPos, cc_cameraPos.xyz, cc_mainLitDir.xyz, cc_planarNDInfo);
+    position = CalculatePlanarShadowClipPos(shadowPos, cc_cameraPos.xyz, cc_matView, cc_matProj, cc_nearFar, cc_shadowWHPBInfo.w);
+    v_dist = shadowPos.w;
     return position;
   }
 }%
 
 CCProgram planar-shadow-fs %{
-  precision mediump float;
-  #include <cc-shadow>
-  #include <output>
+  precision highp float;
+  #include <builtin/uniforms/cc-shadow>
+  #include <legacy/output>
+
+  in float v_dist;
 
   vec4 frag () {
+    if(v_dist < 0.0)
+      discard;
     return CCFragOutput(cc_shadowColor);
   }
 }%

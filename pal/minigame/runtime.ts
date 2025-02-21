@@ -1,14 +1,39 @@
-import { COCOSPLAY, HUAWEI, LINKSURE, OPPO, QTT, VIVO } from 'internal:constants';
-import { SystemInfo, IMiniGame } from 'pal/minigame';
+/*
+ Copyright (c) 2022-2023 Xiamen Yaji Software Co., Ltd.
 
-import { Orientation } from '../system/enum-type/orientation';
+ https://www.cocos.com/
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+*/
+
+import { VIVO } from 'internal:constants';
+import { SystemInfo, IMiniGame } from 'pal/minigame';
+import { checkPalIntegrity, withImpl } from '../integrity-check';
+
+import { Orientation } from '../screen-adapter/enum-type';
 import { cloneObject, createInnerAudioContextPolyfill } from '../utils';
 
 declare let ral: any;
 
-// @ts-expect-error can't init minigame when it's declared
-const minigame: IMiniGame = {};
+const minigame: IMiniGame = {} as IMiniGame;
 cloneObject(minigame, ral);
+minigame.ral = ral;
 
 // #region SystemInfo
 const systemInfo = minigame.getSystemInfoSync();
@@ -17,8 +42,12 @@ minigame.isDevTool = (systemInfo.platform === 'devtools');
 // NOTE: size and orientation info is wrong at the init phase, need to define as a getter
 Object.defineProperty(minigame, 'isLandscape', {
     get () {
-        const locSysInfo = minigame.getSystemInfoSync();
-        return locSysInfo.screenWidth > locSysInfo.screenHeight;
+        if (VIVO) {
+            return systemInfo.screenWidth > systemInfo.screenHeight;
+        } else {
+            const locSysInfo = minigame.getSystemInfoSync();
+            return locSysInfo.screenWidth > locSysInfo.screenHeight;
+        }
     },
 });
 // init landscapeOrientation as LANDSCAPE_RIGHT
@@ -36,27 +65,42 @@ Object.defineProperty(minigame, 'orientation', {
         return minigame.isLandscape ? landscapeOrientation : Orientation.PORTRAIT;
     },
 });
+
 // #endregion SystemInfo
 
 // #region Accelerometer
-minigame.onAccelerometerChange = function (cb) {
-    ral.onAccelerometerChange((res) => {
-        let x = res.x;
-        let y = res.y;
-        if (minigame.isLandscape) {
-            const orientationFactor = landscapeOrientation === Orientation.LANDSCAPE_RIGHT ? 1 : -1;
-            const tmp = x;
-            x = -y * orientationFactor;
-            y = tmp * orientationFactor;
-        }
-
-        const resClone = {
-            x,
-            y,
-            z: res.z,
+let _customAccelerometerCb: AccelerometerChangeCallback | undefined;
+let _innerAccelerometerCb: AccelerometerChangeCallback | undefined;
+let _needHandleAccelerometerCb = false;
+minigame.onAccelerometerChange = function (cb): void {
+    if (!_innerAccelerometerCb) {
+        _innerAccelerometerCb = (res): void => {
+            if (!_needHandleAccelerometerCb) {
+                return;
+            }
+            let x = res.x;
+            let y = res.y;
+            if (minigame.isLandscape) {
+                const orientationFactor = landscapeOrientation === Orientation.LANDSCAPE_RIGHT ? 1 : -1;
+                const tmp = x;
+                x = -y * orientationFactor;
+                y = tmp * orientationFactor;
+            }
+            const resClone = {
+                x,
+                y,
+                z: res.z,
+            };
+            _customAccelerometerCb?.(resClone);
         };
-        cb(resClone);
-    });
+        ral.onAccelerometerChange(_innerAccelerometerCb);
+    }
+    _needHandleAccelerometerCb = true;
+    _customAccelerometerCb = cb;
+};
+minigame.offAccelerometerChange = function (cb): void {
+    _needHandleAccelerometerCb = false;
+    _customAccelerometerCb = undefined;
 };
 // #endregion Accelerometer
 
@@ -67,32 +111,26 @@ minigame.createInnerAudioContext = createInnerAudioContextPolyfill(ral, {
     onSeek: true,
 });
 
-// safeArea
-// origin point on the top-left corner
-// FIX_ME: wrong safe area when orientation is landscape left
-minigame.getSafeArea = function () {
-    let { top, left, bottom, right, width, height } = systemInfo.safeArea;
-    // HACK: on iOS device, the orientation should mannually rotate
-    if (systemInfo.platform === 'ios' && !minigame.isDevTool && minigame.isLandscape) {
-        const tempData = [right, top, left, bottom, width, height];
-        top = systemInfo.screenHeight - tempData[0];
-        left = tempData[1];
-        bottom = systemInfo.screenHeight - tempData[2];
-        right = tempData[3];
-        height = tempData[4];
-        width = tempData[5];
+// #region SafeArea
+minigame.getSafeArea = function (): SafeArea {
+    const locSystemInfo = ral.getSystemInfoSync() as SystemInfo;
+    if (locSystemInfo.safeArea) {
+        return locSystemInfo.safeArea;
+    } else {
+        console.warn('getSafeArea is not supported on this platform');
+        const systemInfo =  minigame.getSystemInfoSync();
+        return {
+            top: 0,
+            left: 0,
+            bottom: systemInfo.screenHeight,
+            right: systemInfo.screenWidth,
+            width: systemInfo.screenWidth,
+            height: systemInfo.screenHeight,
+        };
     }
-    return { top, left, bottom, right, width, height };
 };
-
-if (VIVO) {
-    // HACK: need to be handled in ral lib.
-    minigame.getSystemInfoSync = function () {
-        const sys = ral.getSystemInfoSync() as SystemInfo;
-        sys.windowWidth = sys.screenWidth;
-        sys.windowHeight = sys.screenHeight;
-        return sys;
-    };
-}
+// #endregion SafeArea
 
 export { minigame };
+
+checkPalIntegrity<typeof import('pal/minigame')>(withImpl<typeof import('./runtime')>());

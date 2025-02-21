@@ -1,19 +1,18 @@
 /*
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -24,16 +23,10 @@
  THE SOFTWARE.
 */
 
-/**
- * @packageDocumentation
- * @module ui
- */
-
 import { ccclass, help, executionOrder, menu, tooltip, requireComponent, executeInEditMode, serializable } from 'cc.decorator';
-import { Component } from '../../core/components/component';
-import { Color } from '../../core/math';
+import { Component } from '../../scene-graph/component';
+import { Color, assertIsTrue, cclegacy } from '../../core';
 import { Label } from './label';
-import { legacyCC } from '../../core/global-exports';
 
 /**
  * @en
@@ -42,15 +35,7 @@ import { legacyCC } from '../../core/global-exports';
  * @zh
  * 描边效果组件,用于字体描边,只能用于系统字体。
  *
- * @example
- * ```ts
- * import { Node, Label, LabelOutline } from 'cc';
- * // Create a new node and add label components.
- * const node = new Node("New Label");
- * const label = node.addComponent(Label);
- * const outline = node.addComponent(LabelOutline);
- * node.parent = this.node;
- * ```
+ * @deprecated since v3.8.2, please use [[Label.enableOutline]] instead.
  */
 @ccclass('cc.LabelOutline')
 @help('i18n:cc.LabelOutline')
@@ -59,11 +44,6 @@ import { legacyCC } from '../../core/global-exports';
 @requireComponent(Label)
 @executeInEditMode
 export class LabelOutline extends Component {
-    @serializable
-    protected _color = new Color(0, 0, 0, 255);
-    @serializable
-    protected _width = 2;
-
     /**
      * @en
      * Outline color.
@@ -71,25 +51,19 @@ export class LabelOutline extends Component {
      * @zh
      * 改变描边的颜色。
      *
-     * @example
-     * ```ts
-     * import { Color } from 'cc';
-     * outline.color = new Color(0.5, 0.3, 0.7, 1.0);
-     * ```
+     * @deprecated since v3.8.2, please use [[Label.outlineColor]] instead.
      */
     @tooltip('i18n:labelOutline.color')
-    // @constget
     get color (): Readonly<Color> {
-        return this._color;
+        const label = this.node.getComponent(Label);
+        assertIsTrue(label);
+        return label.outlineColor;
     }
 
     set color (value) {
-        if (this._color === value) {
-            return;
-        }
-
-        this._color.set(value);
-        this._updateRenderData();
+        const label = this.node.getComponent(Label);
+        assertIsTrue(label);
+        label.outlineColor = value;
     }
 
     /**
@@ -99,37 +73,38 @@ export class LabelOutline extends Component {
      * @zh
      * 改变描边的宽度。
      *
-     * @example
-     * ```ts
-     * outline.width = 3;
-     * ```
+     * @deprecated since v3.8.2, please use [[Label.outlineWidth]] instead.
      */
     @tooltip('i18n:labelOutline.width')
-    get width () {
-        return this._width;
+    get width (): number {
+        const label = this.node.getComponent(Label);
+        assertIsTrue(label);
+        return label.outlineWidth;
     }
 
     set width (value) {
-        if (this._width === value) {
-            return;
-        }
-
-        this._width = value;
-        this._updateRenderData();
-    }
-
-    public onEnable () {
-        this._updateRenderData();
-    }
-
-    public onDisable () {
-        this._updateRenderData();
-    }
-
-    protected _updateRenderData () {
         const label = this.node.getComponent(Label);
-        if (label) {
-            label.updateRenderData(true);
-        }
+        assertIsTrue(label);
+        label.outlineWidth = value;
+    }
+
+    /**
+     * @deprecated since v3.8.2, please use [[Label.enableOutline]] instead.
+     */
+    public onEnable (): void {
+        const label = this.node.getComponent(Label);
+        assertIsTrue(label);
+        label.enableOutline = true;
+    }
+
+    /**
+     * @deprecated since v3.8.2, please use [[Label.enableOutline]] instead.
+     */
+    public onDisable (): void {
+        const label = this.node.getComponent(Label);
+        assertIsTrue(label);
+        label.enableOutline = false;
     }
 }
+
+cclegacy.LabelOutline = LabelOutline;

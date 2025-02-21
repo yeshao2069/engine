@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,28 +20,28 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
-/**
- * @packageDocumentation
- * @module component/video
- */
-
-import { system } from 'pal/system';
-import { mat4 } from '../core/math';
-import { sys, view, screen, warn } from '../core/platform';
-import { game } from '../core';
+import { screenAdapter } from 'pal/screen-adapter';
+import { mat4, visibleRect } from '../core';
+import { sys, screen, warn } from '../core/platform';
+import { game } from '../game';
 import { contains } from '../core/utils/misc';
-import { EventType, READY_STATE } from './video-player-enums';
+import { VideoPlayerEventType, READY_STATE } from './video-player-enums';
 import { VideoPlayerImpl } from './video-player-impl';
-import { ClearFlagBit } from '../core/gfx';
-import visibleRect from '../core/platform/visible-rect';
-import { BrowserType, OS } from '../../pal/system/enum-type';
+import { ClearFlagBit } from '../gfx';
+import { BrowserType, OS } from '../../pal/system-info/enum-type';
+import { ccwindow } from '../core/global-exports';
+import type { VideoPlayer } from './video-player';
+import type { VideoClip } from './assets/video-clip';
+
+const ccdocument = ccwindow.document;
 
 const MIN_ZINDEX = -(2 ** 15);
 
 const _mat4_temp = mat4();
 
+/** @mangle */
 export class VideoPlayerImplWeb extends VideoPlayerImpl {
     protected _eventList: Map<string, ((e: Event) => void)> = new Map();
 
@@ -50,19 +49,19 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
     protected _clearColorA = -1;
     protected _clearFlag;
 
-    constructor (component) {
+    constructor (component: VideoPlayer) {
         super(component);
     }
 
-    protected addListener (type: string, handler: (e: Event)=> void) {
+    protected addListener (type: string, handler: (e: Event) => void): void {
         if (!this._video) {
             return;
         }
         this._eventList.set(type, handler);
         this._video.addEventListener(type, handler);
     }
-    protected removeAllListeners () {
-        this._eventList.forEach((handler, type) => {
+    protected removeAllListeners (): void {
+        this._eventList.forEach((handler, type): void => {
             if (!this._video) {
                 return;
             }
@@ -71,11 +70,11 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         this._eventList.clear();
     }
 
-    public canPlay () {
+    public canPlay (): void {
         if (this.video) {
             const promise = this.video.play();
             // the play API can only be initiated by user gesture.
-            if (window.Promise && promise instanceof Promise) {
+            if (ccwindow.Promise && promise instanceof Promise) {
                 // eslint-disable-next-line @typescript-eslint/no-floating-promises
                 promise.catch((error) => {
                     // Auto-play was prevented
@@ -88,18 +87,18 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         }
     }
 
-    public pause () {
+    public pause (): void {
         if (this.video) {
             this.video.pause();
             this._cachedCurrentTime = this.video.currentTime;
         }
     }
 
-    public resume () {
+    public resume (): void {
         this.play();
     }
 
-    public stop () {
+    public stop (): void {
         if (this.video) {
             this._ignorePause = true;
             this.video.currentTime = 0;
@@ -107,25 +106,25 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
             this._cachedCurrentTime = 0;
             setTimeout(() => {
                 this._ignorePause = false;
-                this.dispatchEvent(EventType.STOPPED);
+                this.dispatchEvent(VideoPlayerEventType.STOPPED);
             }, 0);
         }
     }
 
-    public syncClip (clip: any) {
+    public syncClip (clip: VideoClip | null): void {
         this.removeVideoPlayer();
         if (!clip) { return; }
         this.createVideoPlayer(clip.nativeUrl);
     }
 
-    public syncURL (url: string) {
+    public syncURL (url: string): void {
         this.removeVideoPlayer();
         if (!url) { return; }
         this.createVideoPlayer(url);
     }
 
-    public syncPlaybackRate (val: number) {
-        if (system.browserType === BrowserType.UC) {
+    public syncPlaybackRate (val: number): void {
+        if (sys.browserType === BrowserType.UC) {
             warn('playbackRate is not supported by the uc mobile browser.');
             return;
         }
@@ -134,63 +133,64 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         }
     }
 
-    public syncVolume (val: number) {
+    public syncVolume (val: number): void {
         if (this.video) {
             this.video.volume = val;
         }
     }
 
-    public syncMute (enabled: boolean) {
+    public syncMute (enabled: boolean): void {
         if (this.video) {
             this.video.muted = enabled;
         }
     }
 
-    public syncLoop (enabled: boolean) {
+    public syncLoop (enabled: boolean): void {
         if (this.video) {
             this.video.loop = enabled;
         }
     }
 
-    public getDuration () {
+    public getDuration (): number {
         if (!this.video) {
             return 0;
         }
         return this.video.duration;
     }
 
-    public getCurrentTime () {
+    public getCurrentTime (): number {
         if (this.video) {
             return this.video.currentTime;
         }
         return -1;
     }
 
-    public seekTo (val: number) {
+    public seekTo (val: number): void {
         if (this.video) {
             this.video.currentTime = val;
+            this._cachedCurrentTime = this.video.currentTime;
         }
     }
 
-    canFullScreen (enabled: boolean) {
-        const video = this._video;
+    canFullScreen (enabled: boolean): void {
+        // NOTE: below we visited some non-standard web interfaces to complement browser compatibility
+        const video = this._video as HTMLVideoElement & {
+            webkitEnterFullscreen?: () => void;
+            webkitExitFullscreen?: () => void;
+            webkitDisplayingFullscreen: boolean;
+        };
         if (!video || video.readyState !== READY_STATE.HAVE_ENOUGH_DATA) {
             return;
         }
 
-        if (system.os === OS.IOS && sys.isBrowser) {
+        if (sys.os === OS.IOS && sys.isBrowser) {
             if (enabled) {
-                // @ts-expect-error only ios support
                 if (video.webkitEnterFullscreen) {
-                    // @ts-expect-error only ios support
                     video.webkitEnterFullscreen();
                 }
-                // @ts-expect-error only ios support
             } else if (video.webkitExitFullscreen) {
-                // @ts-expect-error only ios support
                 video.webkitExitFullscreen();
             }
-            // @ts-expect-error only ios support
             this._fullScreenOnAwake = video.webkitDisplayingFullscreen;
             return;
         }
@@ -206,14 +206,14 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
 
         if (enabled) {
             // fix IE full screen content is not centered
-            if (system.browserType === BrowserType.IE) {
+            if (sys.browserType === BrowserType.IE) {
                 video.style.transform = '';
             }
             // Monitor video entry and exit full-screen events
             video.setAttribute('x5-video-player-fullscreen', 'true');
             // eslint-disable-next-line @typescript-eslint/no-floating-promises
             screen.requestFullScreen(video, (document) => {
-                const fullscreenElement = system.browserType === BrowserType.IE ? document.msFullscreenElement : document.fullscreenElement;
+                const fullscreenElement = sys.browserType === BrowserType.IE ? document.msFullscreenElement : document.fullscreenElement;
                 this._fullScreenOnAwake = (fullscreenElement === video);
             }, () => {
                 this._fullScreenOnAwake = false;
@@ -225,7 +225,7 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         }
     }
 
-    public syncStayOnBottom (enabled: boolean) {
+    public syncStayOnBottom (enabled: boolean): void {
         if (this._video) {
             this._video.style['z-index'] = enabled ? MIN_ZINDEX : 0;
             this._stayOnBottom = enabled;
@@ -233,14 +233,14 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         this._dirty = true;
     }
 
-    public syncKeepAspectRatio (enabled: boolean) {
+    public syncKeepAspectRatio (enabled: boolean): void {
         this._keepAspectRatio = enabled;
         if (enabled && this._loadedMeta && this._video) {
             this.syncUITransform(this._video.videoWidth, this._video.videoHeight);
         }
     }
 
-    public removeVideoPlayer () {
+    public removeVideoPlayer (): void {
         const video = this._video;
         if (video) {
             if (contains(game.container, video)) {
@@ -255,8 +255,8 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         this._video = null;
     }
 
-    public createVideoPlayer (url: string) {
-        const video = this._video = document.createElement('video');
+    public createVideoPlayer (url: string): void {
+        const video = this._video = ccdocument.createElement('video');
         video.className = 'cocosVideo';
         video.style.visibility = 'hidden';
         video.style.position = 'absolute';
@@ -272,12 +272,12 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         video.setAttribute('playsinline', '');
         this._bindDomEvent();
         game.container!.appendChild(video);
-        const source = document.createElement('source');
+        const source = ccdocument.createElement('source');
         video.appendChild(source);
         source.src = url;
     }
 
-    protected _bindDomEvent () {
+    protected _bindDomEvent (): void {
         const video = this._video;
         this.addListener('loadedmetadata', this.onLoadedMetadata.bind(this));
         this.addListener('canplay', this.onCanPlay.bind(this));
@@ -290,7 +290,7 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         this.addListener('error', this.onError.bind(this));
     }
 
-    public onCanPlay (e: Event) {
+    public onCanPlay (e: Event): void {
         const video = e.target as HTMLVideoElement;
         if (this._loaded && video) {
             return;
@@ -305,7 +305,7 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         }
     }
 
-    public enable () {
+    public enable (): void {
         if (this._video) {
             this._visible = true;
             if (this._video.style.visibility === 'visible') {
@@ -315,7 +315,7 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         }
     }
 
-    public disable (noPause?: boolean) {
+    public disable (noPause?: boolean): void {
         if (this._video) {
             if (!noPause && this._playing) {
                 this._video.pause();
@@ -328,15 +328,11 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         }
     }
 
-    public syncMatrix () {
+    public syncMatrix (): void {
         if (!this._video || !this._visible || !this._component) return;
 
         const camera = this.UICamera;
         if (!camera) {
-            return;
-        }
-
-        if (screen.fullScreen()) {
             return;
         }
 
@@ -387,7 +383,8 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         this._w = width;
         this._h = height;
 
-        const dpr = view.getDevicePixelRatio();
+        // TODO: implement videoPlayer in PAL
+        const dpr = screenAdapter.devicePixelRatio;
         const scaleX = 1 / dpr;
         const scaleY = 1 / dpr;
 
@@ -397,7 +394,7 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         this._video.style.width = `${this._w}px`;
         this._video.style.height = `${this._h}px`;
 
-        if (system.browserType !== BrowserType.MOBILE_QQ) {
+        if (sys.browserType !== BrowserType.MOBILE_QQ) {
             this._video.style.objectFit = this._keepAspectRatio ? 'none' : 'fill';
         } else {
             warn('keepAspectRatio is not supported by the qq mobile browser.');
@@ -419,7 +416,7 @@ export class VideoPlayerImplWeb extends VideoPlayerImpl {
         this._video.style['-webkit-transform'] = matrix;
         // video style would change when enter fullscreen on IE
         // there is no way to add fullscreenchange event listeners on IE so that we can restore the cached video style
-        if (system.browserType !== BrowserType.IE) {
+        if (sys.browserType !== BrowserType.IE) {
             this._forceUpdate = false;
         }
     }

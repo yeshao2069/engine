@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,18 +20,16 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
+*/
 
-/**
- * @packageDocumentation
- * @hidden
- */
-
+import { absMaxComponent } from '../../../core';
 import { SphereCollider } from '../../framework';
 import { ISphereShape } from '../../spec/i-physics-shape';
-import { PX } from '../export-physx';
+import { PX } from '../physx-adapter';
+import { PhysXInstance } from '../physx-instance';
 import { EPhysXShapeType, PhysXShape } from './physx-shape';
 
+/** @mangle */
 export class PhysXSphereShape extends PhysXShape implements ISphereShape {
     static SPHERE_GEOMETRY: any;
 
@@ -43,34 +40,29 @@ export class PhysXSphereShape extends PhysXShape implements ISphereShape {
         }
     }
 
-    setRadius (v: number): void {
+    updateRadius (): void {
         this.updateScale();
     }
 
-    get collider () {
+    get collider (): SphereCollider {
         return this._collider as SphereCollider;
     }
 
-    onComponentSet () {
+    onComponentSet (): void {
         this.updateGeometry();
-        const physics = this._sharedBody.wrappedWorld.physics;
-        const pxmat = this.getSharedMaterial(this.collider.sharedMaterial!);
-        this._impl = physics.createShape(PhysXSphereShape.SPHERE_GEOMETRY, pxmat, true, this._flags);
+        const pxmat = this.getSharedMaterial(this.collider.sharedMaterial);
+        this._impl = PhysXInstance.physics.createShape(PhysXSphereShape.SPHERE_GEOMETRY, pxmat, true, this._flags);
     }
 
-    updateScale () {
+    updateScale (): void {
         this.updateGeometry();
         this._impl.setGeometry(PhysXSphereShape.SPHERE_GEOMETRY);
         this.setCenter(this._collider.center);
     }
 
-    updateGeometry () {
+    updateGeometry (): void {
         const co = this.collider;
-        const ws = co.node.worldScale;
-        const absX = Math.abs(ws.x);
-        const absY = Math.abs(ws.y);
-        const absZ = Math.abs(ws.z);
-        const maxSp = Math.max(Math.max(absX, absY), absZ);
+        const maxSp = Math.abs(absMaxComponent(this.collider.node.worldScale));
         PhysXSphereShape.SPHERE_GEOMETRY.setRadius(Math.max(0.0001, co.radius * maxSp));
     }
 }

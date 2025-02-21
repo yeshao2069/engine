@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,28 +20,22 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-
-/**
- * @packageDocumentation
- * @hidden
- */
+*/
 
 import CANNON from '@cocos/cannon';
-import { Quat, Vec3 } from '../../core/math';
+import { Quat, Vec3, js } from '../../core';
 import { ERigidBodyType, PhysicsGroup } from '../framework/physics-enum';
 import { getWrap, setWrap } from '../utils/util';
 import { CannonWorld } from './cannon-world';
 import { CannonShape } from './shapes/cannon-shape';
 import { Collider, PhysicsSystem } from '../../../exports/physics-framework';
-import { TransformBit } from '../../core/scene-graph/node-enum';
-import { Node } from '../../core';
+import { TransformBit } from '../../scene-graph/node-enum';
+import { Node } from '../../scene-graph';
 import { CollisionEventType } from '../framework/physics-interface';
 import { CannonRigidBody } from './cannon-rigid-body';
 import { commitShapeUpdates } from './cannon-util';
 import { CannonContactEquation } from './cannon-contact-equation';
 import { CannonConstraint } from './constraints/cannon-constraint';
-import { fastRemoveAt } from '../../core/utils/array';
 
 const v3_0 = new Vec3();
 const quat_0 = new Quat();
@@ -56,13 +49,13 @@ const CollisionEventObject = {
 };
 
 /**
- * node : shared-body = 1 : 1
- * static
- */
+  * node : shared-body = 1 : 1
+  * static
+  */
 export class CannonSharedBody {
     private static readonly sharedBodesMap = new Map<string, CannonSharedBody>();
 
-    static getSharedBody (node: Node, wrappedWorld: CannonWorld, wrappedBody?: CannonRigidBody) {
+    static getSharedBody (node: Node, wrappedWorld: CannonWorld, wrappedBody?: CannonRigidBody): CannonSharedBody {
         const key = node.uuid;
         let newSB: CannonSharedBody;
         if (CannonSharedBody.sharedBodesMap.has(key)) {
@@ -73,14 +66,18 @@ export class CannonSharedBody {
             const m = PhysicsSystem.instance.collisionMatrix[g];
             newSB.body.collisionFilterGroup = g;
             newSB.body.collisionFilterMask = m;
+            newSB.body.position = new CANNON.Vec3(node.worldPosition.x, node.worldPosition.y, node.worldPosition.z);
+            newSB.body.quaternion = new CANNON.Quaternion(node.worldRotation.x, node.worldRotation.y, node.worldRotation.z, node.worldRotation.w);
             CannonSharedBody.sharedBodesMap.set(node.uuid, newSB);
         }
         if (wrappedBody) {
             newSB.wrappedBody = wrappedBody;
-            const g = (wrappedBody.rigidBody as any)._group;
+            const g = wrappedBody.rigidBody.group;
             const m = PhysicsSystem.instance.collisionMatrix[g];
             newSB.body.collisionFilterGroup = g;
             newSB.body.collisionFilterMask = m;
+            newSB.body.position = new CANNON.Vec3(node.worldPosition.x, node.worldPosition.y, node.worldPosition.z);
+            newSB.body.quaternion = new CANNON.Quaternion(node.worldRotation.x, node.worldRotation.y, node.worldRotation.z, node.worldRotation.w);
         }
         return newSB;
     }
@@ -98,10 +95,10 @@ export class CannonSharedBody {
     private onCollidedListener = this.onCollided.bind(this);
 
     /**
-     * add or remove from world \
-     * add, if enable \
-     * remove, if disable & shapes.length == 0 & wrappedBody disable
-     */
+      * add or remove from world \
+      * add, if enable \
+      * remove, if disable & shapes.length == 0 & wrappedBody disable
+      */
     set enabled (v: boolean) {
         if (v) {
             if (this.index < 0) {
@@ -111,7 +108,7 @@ export class CannonSharedBody {
             }
         } else if (this.index >= 0) {
             const isRemove = (this.wrappedShapes.length === 0 && this.wrappedBody == null)
-                || (this.wrappedShapes.length === 0 && this.wrappedBody != null && !this.wrappedBody.isEnabled);
+                 || (this.wrappedShapes.length === 0 && this.wrappedBody != null && !this.wrappedBody.isEnabled);
 
             if (isRemove) {
                 this.body.sleep(); // clear velocity etc.
@@ -122,7 +119,7 @@ export class CannonSharedBody {
     }
 
     set reference (v: boolean) {
-        // eslint-disable-next-line no-unused-expressions
+        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
         v ? this.ref++ : this.ref--;
         if (this.ref === 0) { this.destroy(); }
     }
@@ -138,7 +135,7 @@ export class CannonSharedBody {
         this.body.addEventListener('cc-collide', this.onCollidedListener);
     }
 
-    addShape (v: CannonShape) {
+    addShape (v: CannonShape): void {
         const index = this.wrappedShapes.indexOf(v);
         if (index < 0) {
             const index = this.body.shapes.length;
@@ -153,17 +150,17 @@ export class CannonSharedBody {
         }
     }
 
-    removeShape (v: CannonShape) {
+    removeShape (v: CannonShape): void {
         const index = this.wrappedShapes.indexOf(v);
         if (index >= 0) {
-            fastRemoveAt(this.wrappedShapes, index);
+            js.array.fastRemoveAt(this.wrappedShapes, index);
             this.body.removeShape(v.impl);
             v.setIndex(-1);
             if (this.body.isSleeping()) this.body.wakeUp();
         }
     }
 
-    addJoint (v: CannonConstraint, type: 0 | 1) {
+    addJoint (v: CannonConstraint, type: 0 | 1): void {
         if (type) {
             const i = this.wrappedJoints1.indexOf(v);
             if (i < 0) this.wrappedJoints1.push(v);
@@ -173,17 +170,17 @@ export class CannonSharedBody {
         }
     }
 
-    removeJoint (v: CannonConstraint, type: 0 | 1) {
+    removeJoint (v: CannonConstraint, type: 0 | 1): void {
         if (type) {
             const i = this.wrappedJoints1.indexOf(v);
-            if (i >= 0) fastRemoveAt(this.wrappedJoints1, i);
+            if (i >= 0) js.array.fastRemoveAt(this.wrappedJoints1, i);
         } else {
             const i = this.wrappedJoints0.indexOf(v);
-            if (i >= 0) fastRemoveAt(this.wrappedJoints0, i);
+            if (i >= 0) js.array.fastRemoveAt(this.wrappedJoints0, i);
         }
     }
 
-    syncSceneToPhysics () {
+    syncSceneToPhysics (): void {
         const node = this.node;
         const body = this.body;
         if (node.hasChangedFlags) {
@@ -195,7 +192,7 @@ export class CannonSharedBody {
         }
     }
 
-    syncPhysicsToScene () {
+    syncPhysicsToScene (): void {
         const n = this.node;
         const b = this.body;
         if (b.type === ERigidBodyType.DYNAMIC) {
@@ -208,7 +205,7 @@ export class CannonSharedBody {
         }
     }
 
-    syncInitial () {
+    syncInitial (): void {
         const n = this.node;
         const b = this.body;
         Vec3.copy(b.position, n.worldPosition);
@@ -220,7 +217,7 @@ export class CannonSharedBody {
         if (b.isSleeping()) b.wakeUp();
     }
 
-    syncScale () {
+    syncScale (): void {
         for (let i = 0; i < this.wrappedShapes.length; i++) {
             this.wrappedShapes[i].setScale(this.node.worldScale);
         }
@@ -233,7 +230,7 @@ export class CannonSharedBody {
         commitShapeUpdates(this.body);
     }
 
-    private destroy () {
+    private destroy (): void {
         setWrap(this.body, null);
         this.body.removeEventListener('cc-collide', this.onCollidedListener);
         CannonSharedBody.sharedBodesMap.delete(this.node.uuid);
@@ -247,7 +244,7 @@ export class CannonSharedBody {
         (this.onCollidedListener as any) = null;
     }
 
-    private onCollided (event: CANNON.ICollisionEvent) {
+    private onCollided (event: CANNON.ICollisionEvent): void {
         CollisionEventObject.type = event.event;
         const self = getWrap<CannonShape>(event.selfShape);
         const other = getWrap<CannonShape>(event.otherShape);

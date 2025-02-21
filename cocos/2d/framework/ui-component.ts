@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,24 +22,20 @@
  THE SOFTWARE.
 */
 
-/**
- * @packageDocumentation
- * @module ui
- */
-
 import { ccclass, disallowMultiple, executeInEditMode, executionOrder, requireComponent } from 'cc.decorator';
-import { Batcher2D } from '../renderer/batcher-2d';
-import { Component } from '../../core/components/component';
+import { IBatcher } from '../renderer/i-batcher';
+import { Component } from '../../scene-graph/component';
 import { UITransform } from './ui-transform';
-import { Node } from '../../core/scene-graph';
+import { Node } from '../../scene-graph';
 import { Stage } from '../renderer/stencil-manager';
+import type { UIRenderer } from './ui-renderer';
 
 /**
- * @en Legacy 2D base class for rendering component, please use [[Renderable2D]] instead.
- * This component will setup [[NodeUIProperties.uiComp]] in its owner [[Node]]
- * @zh 旧的 2D 渲染组件基类，请使用 [[Renderable2D]] 替代。
- * 这个组件会设置 [[Node]] 上的 [[NodeUIProperties.uiComp]]。
- * @deprecated
+ * @en Legacy 2D base class for rendering component, please use [[UIRenderer]] instead.
+ * This component will setup NodeUIProperties.uiComp in its owner [[Node]].
+ * @zh 旧的 2D 渲染组件基类，请使用 [[UIRenderer]] 替代。
+ * 这个组件会设置 [[Node]] 上的 NodeUIProperties.uiComp。
+ * @deprecated since v3.4.1, please use [[UIRenderer]] instead.
  */
 @ccclass('cc.UIComponent')
 @requireComponent(UITransform)
@@ -50,32 +45,32 @@ import { Stage } from '../renderer/stencil-manager';
 export class UIComponent extends Component {
     protected _lastParent: Node | null = null;
 
-    public __preload () {
-        this.node._uiProps.uiComp = this;
+    constructor () {
+        super();
     }
 
-    public onEnable () {
+    public __preload (): void {
+        // TODO: UIComponent should not be assigned to UIMeshRenderer | UIRenderer @holycanvas
+        // workaround: mark this as any
+        // issue: https://github.com/cocos/cocos-engine/issues/14637
+        this.node._uiProps.uiComp = this as unknown as UIRenderer;
     }
 
-    public onDisable () {
+    public onEnable (): void {
+    }
+
+    public onDisable (): void {
 
     }
 
-    public onDestroy () {
-        if (this.node._uiProps.uiComp === this) {
-            this.node._uiProps.uiComp = null;
+    public onDestroy (): void {
+        // TODO: UIComponent should not be assigned to UIMeshRenderer | UIRenderer @holycanvas
+        // workaround: mark this as any
+        // issue: https://github.com/cocos/cocos-engine/issues/14637
+        const uiProps = this.node._uiProps;
+        if (uiProps.uiComp === this as unknown as UIRenderer) {
+            uiProps.uiComp = null;
         }
-    }
-
-    /**
-     * @en Render data submission procedure, it update and assemble the render data to 2D data buffers before all children submission process.
-     * Usually called each frame when the ui flow assemble all render data to geometry buffers.
-     * Don't call it unless you know what you are doing.
-     * @zh 渲染数据组装程序，这个方法会在所有子节点数据组装之前更新并组装当前组件的渲染数据到 UI 的顶点数据缓冲区中。
-     * 一般在 UI 渲染流程中调用，用于组装所有的渲染数据到顶点数据缓冲区。
-     * 注意：不要手动调用该函数，除非你理解整个流程。
-     */
-    public updateAssembler (render: Batcher2D) {
     }
 
     /**
@@ -85,9 +80,31 @@ export class UIComponent extends Component {
      * @zh 后置渲染数据组装程序，它会在所有子节点的渲染数据组装完成后被调用。
      * 它可能会组装额外的渲染数据到顶点数据缓冲区，也可能只是重置一些渲染状态。
      * 注意：不要手动调用该函数，除非你理解整个流程。
+     * @deprecated since v3.4.1, please use [[UIRenderer]] instead.
      */
-    public postUpdateAssembler (render: Batcher2D) {
+    public postUpdateAssembler (render: IBatcher): void {
     }
 
-    public stencilStage : Stage = Stage.DISABLED;
+    /**
+     * @deprecated since v3.4.1, please use [[UIRenderer]] instead.
+     */
+    public markForUpdateRenderData (enable = true): void {
+    }
+
+    /**
+     * @deprecated since v3.4.1, please use [[UIRenderer]] instead.
+     */
+    public stencilStage: Stage = Stage.DISABLED;
+
+    /**
+     * @deprecated since v3.4.1, please use [[UIRenderer]] instead.
+     */
+    public setNodeDirty (): void {
+    }
+
+    /**
+     * @deprecated since v3.4.1, please use [[UIRenderer]] instead.
+     */
+    public setTextureDirty (): void {
+    }
 }

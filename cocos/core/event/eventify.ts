@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,19 +20,14 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-
-/**
- * @packageDocumentation
- * @module event
- */
+*/
 
 import { CallbacksInvoker } from './callbacks-invoker';
 import { createMap } from '../utils/js';
 
-type Constructor<T = {}> = new (...args: any[]) => T;
+type Constructor<T> = new (...args: any[]) => T;
 
-type EventType = string;
+type EventType = string | number;
 
 /**
  * @zh
@@ -49,7 +43,7 @@ export interface IEventified {
      * @param callback - Callback function when event triggered.
      * @param target - Callback callee.
      */
-    hasEventListener (type: string, callback?: (...any) => void, target?: any): boolean;
+    hasEventListener (type: string, callback?: (...args: any[]) => void, target?: any): boolean;
 
     /**
      * @en
@@ -69,7 +63,7 @@ export interface IEventified {
      *     log("fire in the hole");
      * }, node);
      */
-    on<TFunction extends (...any) => void> (type: EventType, callback: TFunction, thisArg?: any, once?: boolean): typeof callback;
+    on<TFunction extends (...args: any[]) => void> (type: EventType, callback: TFunction, thisArg?: any, once?: boolean): typeof callback;
 
     /**
      * @en
@@ -88,7 +82,7 @@ export interface IEventified {
      *     log("this is the callback and will be invoked only once");
      * }, node);
      */
-    once<TFunction extends (...any) => void> (type: EventType, callback: TFunction, thisArg?: any): typeof callback;
+    once<TFunction extends (...args: any[]) => void> (type: EventType, callback: TFunction, thisArg?: any): typeof callback;
 
     /**
      * @en
@@ -111,7 +105,7 @@ export interface IEventified {
      * // remove all fire event listeners
      * eventTarget.off('fire');
      */
-    off<TFunction extends (...any) => void> (type: EventType, callback?: TFunction, thisArg?: any): void;
+    off<TFunction extends (...args: any[]) => void> (type: EventType, callback?: TFunction, thisArg?: any): void;
 
     /**
      * @en Removes all callbacks previously registered with the same target (passed as parameter).
@@ -157,20 +151,27 @@ export interface IEventified {
  */
 export function Eventify<TBase> (base: Constructor<TBase>): Constructor<TBase & IEventified> {
     class Eventified extends (base as unknown as any) {
-        private _callbackTable = createMap(true);
+        /**
+         * @dontmangle
+         * NOTE: Eventified mixins all properties from CallbacksInvoker.prototype in the following code.
+         * After invoking `Eventify` for a class, CallbacksInvoker's constructor will not be called,
+         * but its functions may invoke `this._callbackTable` which is declared as `public` in CallbacksInvoker.
+         * Marking it as dontmangle is a workaround to avoid the issue that `this._callbackTable` is not defined.
+         */
+        protected _callbackTable = createMap(true);
 
-        public once<Callback extends (...any) => void> (type: EventType, callback: Callback, target?: any) {
+        public once<Callback extends (...any) => void> (type: EventType, callback: Callback, target?: any): Callback {
             return this.on(type, callback, target, true) as Callback;
         }
 
-        public targetOff (typeOrTarget: any) {
+        public targetOff (typeOrTarget: any): void {
             this.removeAll(typeOrTarget);
         }
     }
 
     // Mixin with `CallbacksInvokers`'s prototype
     const callbacksInvokerPrototype = CallbacksInvoker.prototype;
-    const propertyKeys: (string | symbol)[] =        (Object.getOwnPropertyNames(callbacksInvokerPrototype) as (string | symbol)[]).concat(
+    const propertyKeys: (string | symbol)[] = (Object.getOwnPropertyNames(callbacksInvokerPrototype) as (string | symbol)[]).concat(
         Object.getOwnPropertySymbols(callbacksInvokerPrototype),
     );
     for (let iPropertyKey = 0; iPropertyKey < propertyKeys.length; ++iPropertyKey) {
@@ -183,5 +184,5 @@ export function Eventify<TBase> (base: Constructor<TBase>): Constructor<TBase & 
         }
     }
 
-    return Eventified as unknown as any;
+    return Eventified as unknown as Constructor<TBase & IEventified>;
 }

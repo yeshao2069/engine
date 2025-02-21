@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,11 +20,8 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-/**
- * @packageDocumentation
- * @hidden
- */
+*/
+
 import b2 from '@cocos/box2d';
 import { Vec2 } from '../../core';
 import { PHYSICS_2D_PTM_RATIO } from '../framework/physics-types';
@@ -34,7 +30,7 @@ import { b2Shape2D } from './shapes/shape-2d';
 import { IPhysics2DContact, IPhysics2DImpulse, IPhysics2DManifoldPoint, IPhysics2DWorldManifold } from '../spec/i-physics-contact';
 
 export type b2ContactExtends = b2.Contact & {
-    m_userData: any
+    m_userData: any;
 }
 
 const pools: PhysicsContact[] = [];
@@ -70,8 +66,9 @@ const impulse: IPhysics2DImpulse = {
     tangentImpulses: [] as number[],
 };
 
+/** @mangle */
 export class PhysicsContact implements IPhysics2DContact {
-    static get (b2contact: b2ContactExtends) {
+    static get (b2contact: b2ContactExtends): PhysicsContact {
         let c = pools.pop();
 
         if (!c) {
@@ -82,7 +79,7 @@ export class PhysicsContact implements IPhysics2DContact {
         return c;
     }
 
-    static put (b2contact: b2ContactExtends) {
+    static put (b2contact: b2ContactExtends): void {
         const c: PhysicsContact = b2contact.m_userData as PhysicsContact;
         if (!c) return;
 
@@ -100,11 +97,11 @@ export class PhysicsContact implements IPhysics2DContact {
     private _inverted = false;
     private _b2contact: b2ContactExtends | null = null;
 
-    _setImpulse (impulse: b2.ContactImpulse | null) {
+    _setImpulse (impulse: b2.ContactImpulse | null): void {
         this._impulse = impulse;
     }
 
-    init (b2contact: b2ContactExtends) {
+    init (b2contact: b2ContactExtends): void {
         this.colliderA = (b2contact.m_fixtureA.m_userData as b2Shape2D).collider;
         this.colliderB = (b2contact.m_fixtureB.m_userData as b2Shape2D).collider;
         this.disabled = false;
@@ -117,7 +114,7 @@ export class PhysicsContact implements IPhysics2DContact {
         b2contact.m_userData = this;
     }
 
-    reset () {
+    reset (): void {
         this.setTangentSpeed(0);
         this.resetFriction();
         this.resetRestitution();
@@ -131,7 +128,7 @@ export class PhysicsContact implements IPhysics2DContact {
         this._b2contact = null;
     }
 
-    getWorldManifold () {
+    getWorldManifold (): IPhysics2DWorldManifold {
         const points = worldmanifold.points;
         const separations = worldmanifold.separations;
         const normal = worldmanifold.normal;
@@ -163,7 +160,7 @@ export class PhysicsContact implements IPhysics2DContact {
         return worldmanifold;
     }
 
-    getManifold () {
+    getManifold (): { type: number; localPoint: Vec2; localNormal: Vec2; points: ManifoldPoint[]; } {
         const points = manifold.points;
         const localNormal = manifold.localNormal;
         const localPoint = manifold.localPoint;
@@ -197,7 +194,7 @@ export class PhysicsContact implements IPhysics2DContact {
         return manifold;
     }
 
-    getImpulse () {
+    getImpulse (): IPhysics2DImpulse | null {
         const b2impulse = this._impulse;
         if (!b2impulse) return null;
 
@@ -214,39 +211,23 @@ export class PhysicsContact implements IPhysics2DContact {
         return impulse;
     }
 
-    emit (contactType) {
-        let func;
-        switch (contactType) {
-        case Contact2DType.BEGIN_CONTACT:
-            func = 'onBeginContact';
-            break;
-        case Contact2DType.END_CONTACT:
-            func = 'onEndContact';
-            break;
-        case Contact2DType.PRE_SOLVE:
-            func = 'onPreSolve';
-            break;
-        case Contact2DType.POST_SOLVE:
-            func = 'onPostSolve';
-            break;
-        }
-
+    emit (contactType: string): void {
         const colliderA = this.colliderA;
         const colliderB = this.colliderB;
 
-        const bodyA = colliderA!.body;
-        const bodyB = colliderB!.body;
+        const hasListenerA = colliderA?.body?.enabledContactListener;
+        const hasListenerB = colliderB?.body?.enabledContactListener;
 
-        if (bodyA!.enabledContactListener) {
-            colliderA?.emit(contactType, colliderA, colliderB, this);
+        if (hasListenerA) {
+            colliderA.emit(contactType, colliderA, colliderB, this);
         }
 
-        if (bodyB!.enabledContactListener) {
-            colliderB?.emit(contactType, colliderB, colliderA, this);
+        if (hasListenerB) {
+            colliderB.emit(contactType, colliderB, colliderA, this);
         }
 
-        if (bodyA!.enabledContactListener || bodyB!.enabledContactListener) {
-            PhysicsSystem2D.instance.emit(contactType, colliderA, colliderB);
+        if (hasListenerA || hasListenerB) {
+            PhysicsSystem2D.instance.emit(contactType, colliderA, colliderB, this);
         }
 
         if (this.disabled || this.disabledOnce) {
@@ -255,43 +236,43 @@ export class PhysicsContact implements IPhysics2DContact {
         }
     }
 
-    setEnabled (value) {
+    setEnabled (value: boolean): void {
         this._b2contact!.SetEnabled(value);
     }
 
-    isTouching () {
+    isTouching (): boolean {
         return this._b2contact!.IsTouching();
     }
 
-    setTangentSpeed (value) {
+    setTangentSpeed (value: number): void {
         this._b2contact!.SetTangentSpeed(value);
     }
 
-    getTangentSpeed () {
+    getTangentSpeed (): number {
         return this._b2contact!.GetTangentSpeed();
     }
 
-    setFriction (value) {
+    setFriction (value: number): void {
         this._b2contact!.SetFriction(value);
     }
 
-    getFriction () {
+    getFriction (): number {
         return this._b2contact!.GetFriction();
     }
 
-    resetFriction () {
+    resetFriction (): void {
         return this._b2contact!.ResetFriction();
     }
 
-    setRestitution (value) {
+    setRestitution (value: number): void {
         this._b2contact!.SetRestitution(value);
     }
 
-    getRestitution () {
+    getRestitution (): number {
         return this._b2contact!.GetRestitution();
     }
 
-    resetRestitution () {
+    resetRestitution (): void {
         return this._b2contact!.ResetRestitution();
     }
 }

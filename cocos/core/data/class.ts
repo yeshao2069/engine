@@ -1,19 +1,18 @@
 /*
  Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2017-2023 Xiamen Yaji Software Co., Ltd.
 
  http://www.cocos.com
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,11 +22,6 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
 */
-
-/**
- * @packageDocumentation
- * @hidden
- */
 
 import { DEV, EDITOR, SUPPORT_JIT, TEST } from 'internal:constants';
 import { errorID, warnID, error } from '../platform/debug';
@@ -41,59 +35,30 @@ import { preprocessAttrs } from './utils/preprocess-class';
 import * as RF from './utils/requiring-frame';
 
 import { legacyCC } from '../global-exports';
+import { PropertyStash, PropertyStashInternalFlag } from './class-stash';
+import { setPropertyEnumTypeOnAttrs } from './utils/attribute-internal';
 
 const DELIMETER = attributeUtils.DELIMETER;
+const CCCLASS_TAG = '__ctors__'; // Still use this historical name to avoid unsynchronized version issue
 
-function pushUnique (array, item) {
+/**
+ * @engineInternal
+ */
+export const ENUM_TAG = 'Enum';
+
+/**
+ * @engineInternal
+ */
+export const BITMASK_TAG = 'BitMask';
+
+function pushUnique (array, item): void {
     if (array.indexOf(item) < 0) {
         array.push(item);
     }
 }
 
-const deferredInitializer: any = {
-
-    // Configs for classes which needs deferred initialization
-    datas: null,
-
-    // register new class
-    // data - {cls: cls, cb: properties, mixins: options.mixins}
-    push (data) {
-        if (this.datas) {
-            this.datas.push(data);
-        } else {
-            this.datas = [data];
-            // start a new timer to initialize
-            const self = this;
-            setTimeout(() => {
-                self.init();
-            }, 0);
-        }
-    },
-
-    init () {
-        const datas = this.datas;
-        if (datas) {
-            for (let i = 0; i < datas.length; ++i) {
-                const data = datas[i];
-                const cls = data.cls;
-                let properties = data.props;
-                if (typeof properties === 'function') {
-                    properties = properties();
-                }
-                const name = js.getClassName(cls);
-                if (properties) {
-                    declareProperties(cls, name, properties, cls.$super, data.mixins);
-                } else {
-                    errorID(3633, name);
-                }
-            }
-            this.datas = null;
-        }
-    },
-};
-
-// both getter and prop must register the name into __props__ array
-function appendProp (cls, name) {
+// both getter and prop must register the name into `__props__` array
+function appendProp (cls, name): void {
     if (DEV) {
         // if (!IDENTIFIER_RE.test(name)) {
         //    error('The property name "' + name + '" is not compliant with JavaScript naming standards');
@@ -107,10 +72,11 @@ function appendProp (cls, name) {
     pushUnique(cls.__props__, name);
 }
 
-function defineProp (cls, className, propName, val) {
+function defineProp (cls, className, propName, val): void {
     if (DEV) {
         // check base prototype to avoid name collision
         if (CCClass.getInheritanceChain(cls)
+            // eslint-disable-next-line no-prototype-builtins
             .some((x) => x.prototype.hasOwnProperty(propName))) {
             errorID(3637, className, propName, className);
             return;
@@ -129,7 +95,7 @@ function defineProp (cls, className, propName, val) {
     }
 }
 
-function defineGetSet (cls, name, propName, val) {
+function defineGetSet (cls, name, propName, val): void {
     const getter = val.get;
     const setter = val.set;
 
@@ -158,7 +124,7 @@ function defineGetSet (cls, name, propName, val) {
     }
 }
 
-function getDefault (defaultVal) {
+function getDefault (defaultVal): any {
     if (typeof defaultVal === 'function') {
         if (EDITOR) {
             try {
@@ -174,15 +140,7 @@ function getDefault (defaultVal) {
     return defaultVal;
 }
 
-function mixinWithInherited (dest, src, filter?) {
-    for (const prop in src) {
-        if (!dest.hasOwnProperty(prop) && (!filter || filter(prop))) {
-            Object.defineProperty(dest, prop, js.getPropertyDescriptor(src, prop)!);
-        }
-    }
-}
-
-function doDefine (className, baseClass, mixins, options) {
+function doDefine (className, baseClass, options): any {
     const ctor = options.ctor;
 
     if (DEV) {
@@ -192,35 +150,18 @@ function doDefine (className, baseClass, mixins, options) {
         }
     }
 
-    const ctors = [ctor];
-    const fireClass = ctor;
+    js.value(ctor, CCCLASS_TAG, true, true);
 
-    js.value(fireClass, '__ctors__', ctors.length > 0 ? ctors : null, true);
-
-    const prototype = fireClass.prototype;
+    const prototype = ctor.prototype;
     if (baseClass) {
-        fireClass.$super = baseClass;
+        ctor.$super = baseClass;
     }
 
-    if (mixins) {
-        for (let m = mixins.length - 1; m >= 0; m--) {
-            const mixin = mixins[m];
-            mixinWithInherited(prototype, mixin.prototype);
-
-            // mixin attributes
-            if (CCClass._isCCClass(mixin)) {
-                mixinWithInherited(attributeUtils.getClassAttrs(fireClass), attributeUtils.getClassAttrs(mixin));
-            }
-        }
-        // restore constuctor overridden by mixin
-        prototype.constructor = fireClass;
-    }
-
-    js.setClassName(className, fireClass);
-    return fireClass;
+    js.setClassName(className, ctor);
+    return ctor;
 }
 
-function define (className, baseClass, mixins, options) {
+function define (className, baseClass, options): any {
     const Component = legacyCC.Component;
     const frame = RF.peek();
 
@@ -236,7 +177,7 @@ function define (className, baseClass, mixins, options) {
         className = className || frame.script;
     }
 
-    const cls = doDefine(className, baseClass, mixins, options);
+    const cls = doDefine(className, baseClass, options);
 
     if (EDITOR) {
         // for RenderPipeline, RenderFlow, RenderStage
@@ -258,10 +199,10 @@ function define (className, baseClass, mixins, options) {
             window.EditorExtends && window.EditorExtends.Component.addMenu(cls, `hidden:${renderName}/${className}`, -1);
         }
 
-        // Note: `options.ctor` should be same as `cls` except if
+        // Note: `options.ctor` should be the same as `cls` except if
         // cc-class is defined by `cc.Class({/* ... */})`.
         // In such case, `options.ctor` may be `undefined`.
-        // So we can not use `options.ctor`. Instead we should use `cls` which is the "real" registered cc-class.
+        // So we can not use `options.ctor`. Instead, we should use `cls` which is the "real" registered cc-class.
         EditorExtends.emit('class-registered', cls, frame, className);
     }
 
@@ -283,7 +224,7 @@ function define (className, baseClass, mixins, options) {
     return cls;
 }
 
-function getNewValueTypeCodeJit (value) {
+function getNewValueTypeCodeJit (value): string {
     const clsName = js.getClassName(value);
     const type = value.constructor;
     let res = `new ${clsName}(`;
@@ -304,9 +245,9 @@ function getNewValueTypeCodeJit (value) {
 
 // TODO - move escapeForJS, IDENTIFIER_RE, getNewValueTypeCodeJit to misc.js or a new source file
 
-// convert a normal string including newlines, quotes and unicode characters into a string literal
+// convert a normal string including newlines, quotes and Unicode characters into a string literal
 // ready to use in JavaScript source
-function escapeForJS (s) {
+function escapeForJS (s): string {
     return JSON.stringify(s)
         // see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify
         .replace(/\u2028/g, '\\u2028')
@@ -316,20 +257,11 @@ function escapeForJS (s) {
 // simple test variable name
 const IDENTIFIER_RE = /^[A-Za-z_$][0-9A-Za-z_$]*$/;
 
-function declareProperties (cls, className, properties, baseClass, mixins) {
+function declareProperties (cls, className, properties, baseClass): void {
     cls.__props__ = [];
 
     if (baseClass && baseClass.__props__) {
         cls.__props__ = baseClass.__props__.slice();
-    }
-
-    if (mixins) {
-        for (let m = 0; m < mixins.length; ++m) {
-            const mixin = mixins[m];
-            if (mixin.__props__) {
-                cls.__props__ = cls.__props__.concat(mixin.__props__.filter((x) => cls.__props__.indexOf(x) < 0));
-            }
-        }
     }
 
     if (properties) {
@@ -347,7 +279,7 @@ function declareProperties (cls, className, properties, baseClass, mixins) {
     }
 
     const attrs = attributeUtils.getClassAttrs(cls);
-    cls.__values__ = cls.__props__.filter((prop) => attrs[`${prop + DELIMETER}serializable`] !== false);
+    cls.__values__ = cls.__props__.filter((prop) => attrs[`${prop}${DELIMETER}serializable`] !== false);
 }
 
 export function CCClass<TFunction> (options: {
@@ -355,15 +287,13 @@ export function CCClass<TFunction> (options: {
     extends: null | (Function & { __props__?: any; _sealed?: boolean });
     ctor: TFunction;
     properties?: any;
-    mixins?: (Function & { __props__?: any })[];
     editor?: any;
-}) {
+}): any {
     let name = options.name;
     const base = options.extends/* || CCObject */;
-    const mixins = options.mixins;
 
     // create constructor
-    const cls = define(name, base, mixins, options);
+    const cls = define(name, base, options);
     if (!name) {
         name = legacyCC.js.getClassName(cls);
     }
@@ -375,26 +305,14 @@ export function CCClass<TFunction> (options: {
 
     // define Properties
     const properties = options.properties;
-    if (typeof properties === 'function'
-        || (base && base.__props__ === null)
-        || (mixins && mixins.some((x) => x.__props__ === null))
-    ) {
-        if (DEV) {
-            error('not yet implement deferred properties.');
-        } else {
-            deferredInitializer.push({ cls, props: properties, mixins });
-            cls.__props__ = cls.__values__ = null;
-        }
-    } else {
-        declareProperties(cls, name, properties, base, options.mixins);
-    }
+    declareProperties(cls, name, properties, base);
 
     const editor = options.editor;
     if (editor) {
         if (js.isChildClassOf(base, legacyCC.Component)) {
             legacyCC.Component._registerEditorProps(cls, editor);
         } else if (DEV) {
-            warnID(3623, name);
+            warnID(3623, name!);
         }
     }
 
@@ -403,9 +321,9 @@ export function CCClass<TFunction> (options: {
 
 /**
  * @en
- * Checks whether the constructor is created by `Class`.
+ * Checks whether the constructor is initialized by `@ccclass`.
  * @zh
- * 检查构造函数是否由 `Class` 创建。
+ * 检查构造函数是否经由 `@ccclass` 初始化。
  * @method _isCCClass
  * @param {Function} constructor
  * @return {Boolean}
@@ -415,7 +333,7 @@ CCClass._isCCClass = function isCCClass (constructor): boolean {
     // Does not support fastDefined class (ValueType).
     // Use `instanceof ValueType` if necessary.
     // eslint-disable-next-line no-prototype-builtins, @typescript-eslint/no-unsafe-return
-    return constructor?.hasOwnProperty?.('__ctors__');     // __ctors__ is not inherited
+    return constructor?.hasOwnProperty?.(CCCLASS_TAG);     // Remember, the static variable is not inheritable
 };
 
 //
@@ -427,9 +345,8 @@ CCClass._isCCClass = function isCCClass (constructor): boolean {
 // @param {Object} serializableFields
 // @private
 //
-CCClass.fastDefine = function (className, constructor, serializableFields) {
+CCClass.fastDefine = function (className, constructor, serializableFields): void {
     js.setClassName(className, constructor);
-    // constructor.__ctors__ = constructor.__ctors__ || null;
     const props = constructor.__props__ = constructor.__values__ = Object.keys(serializableFields);
     const attrs = attributeUtils.getClassAttrs(constructor);
     for (let i = 0; i < props.length; i++) {
@@ -438,14 +355,29 @@ CCClass.fastDefine = function (className, constructor, serializableFields) {
         attrs[`${key + DELIMETER}default`] = serializableFields[key];
     }
 };
+
 CCClass.Attr = attributeUtils;
 CCClass.attr = attributeUtils.attr;
+
+/**
+ * Returns if the class is a cc-class or is fast-defined.
+ * @param constructor The constructor of the class.
+ * @returns Judge result.
+ * @engineInternal
+ */
+// eslint-disable-next-line @typescript-eslint/ban-types
+export function isCCClassOrFastDefined<T> (constructor: Constructor<T>): boolean {
+    // eslint-disable-next-line no-prototype-builtins, @typescript-eslint/no-unsafe-return
+    return  constructor?.hasOwnProperty?.('__values__');
+}
+
+CCClass.isCCClassOrFastDefined = isCCClassOrFastDefined;
 
 /**
  * Return all super classes.
  * @param constructor The Constructor.
  */
-function getInheritanceChain (constructor) {
+function getInheritanceChain (constructor): any[] {
     const chain: any[] = [];
     for (; ;) {
         constructor = getSuper(constructor);
@@ -485,12 +417,12 @@ interface AttributesRecord {
     default?: unknown;
 }
 
-function parseAttributes (constructor: Function, attributes: IAcceptableAttributes & AttributesRecord, className: string, propertyName: string, usedInGetter) {
+function parseAttributes (constructor: Function, attributes: PropertyStash, className: string, propertyName: string, usedInGetter): void {
     const ERR_Type = DEV ? 'The %s of %s must be type %s' : '';
 
     let attrs: IParsedAttribute | null = null;
     let propertyNamePrefix = '';
-    function initAttrs () {
+    function initAttrs (): any {
         propertyNamePrefix = propertyName + DELIMETER;
         return attrs = attributeUtils.getClassAttrs(constructor);
     }
@@ -524,10 +456,13 @@ function parseAttributes (constructor: Function, attributes: IAcceptableAttribut
         // }
         else if (typeof type === 'object') {
             if (Enum.isEnum(type)) {
-                (attrs || initAttrs())[`${propertyNamePrefix}type`] = 'Enum';
-                attrs![`${propertyNamePrefix}enumList`] = Enum.getList(type);
+                setPropertyEnumTypeOnAttrs(
+                    attrs || initAttrs(),
+                    propertyName,
+                    type,
+                );
             } else if (BitMask.isBitMask(type)) {
-                (attrs || initAttrs())[`${propertyNamePrefix}type`] = 'BitMask';
+                (attrs || initAttrs())[`${propertyNamePrefix}type`] = BITMASK_TAG;
                 attrs![`${propertyNamePrefix}bitmaskList`] = BitMask.getList(type);
             } else if (DEV) {
                 errorID(3645, className, propertyName, type);
@@ -548,10 +483,12 @@ function parseAttributes (constructor: Function, attributes: IAcceptableAttribut
     if ('default' in attributes) {
         (attrs || initAttrs())[`${propertyNamePrefix}default`] = attributes.default;
     } else if (((EDITOR && !window.Build) || TEST) && warnOnNoDefault && !(attributes.get || attributes.set)) {
-        warnID(3654, className, propertyName);
+        // TODO: we close this warning for now:
+        // issue: https://github.com/cocos/3d-tasks/issues/14887
+        // warnID(3654, className, propertyName);
     }
 
-    const parseSimpleAttribute = (attributeName: keyof IAcceptableAttributes, expectType: string) => {
+    const parseSimpleAttribute = (attributeName: keyof IAcceptableAttributes, expectType: string): void => {
         if (attributeName in attributes) {
             const val = attributes[attributeName];
             if (typeof val === expectType) {
@@ -579,46 +516,61 @@ function parseAttributes (constructor: Function, attributes: IAcceptableAttribut
             (attrs || initAttrs())[`${propertyNamePrefix}readonly`] = attributes.readonly;
         }
         parseSimpleAttribute('tooltip', 'string');
-        parseSimpleAttribute('tab', 'string');
+        if (attributes.group) {
+            (attrs || initAttrs())[`${propertyNamePrefix}group`] = attributes.group;
+        }
         parseSimpleAttribute('slide', 'boolean');
         parseSimpleAttribute('unit', 'string');
+        parseSimpleAttribute('radioGroup', 'boolean');
     }
 
-    if (attributes.__noImplicit) {
-        (attrs || initAttrs())[`${propertyNamePrefix}serializable`] = attributes.serializable ?? false;
+    const isStandaloneMode = attributes.__internalFlags & PropertyStashInternalFlag.STANDALONE;
+
+    let normalizedSerializable: undefined | boolean;
+    if (isStandaloneMode) {
+        normalizedSerializable = attributes.serializable === true
+            || (attributes.__internalFlags & PropertyStashInternalFlag.IMPLICIT_SERIALIZABLE) !== 0;
     } else if (attributes.serializable === false) {
+        normalizedSerializable = false;
         if (DEV && usedInGetter) {
             errorID(3613, 'serializable', className, propertyName);
-        } else {
-            (attrs || initAttrs())[`${propertyNamePrefix}serializable`] = false;
         }
+    }
+    if (typeof normalizedSerializable !== 'undefined') {
+        (attrs || initAttrs())[`${propertyNamePrefix}serializable`] = normalizedSerializable;
     }
 
     parseSimpleAttribute('formerlySerializedAs', 'string');
 
-    if (EDITOR) {
+    if (DEV) {
         if ('animatable' in attributes) {
             (attrs || initAttrs())[`${propertyNamePrefix}animatable`] = attributes.animatable;
         }
     }
 
     if (DEV) {
-        if (attributes.__noImplicit) {
-            (attrs || initAttrs())[`${propertyNamePrefix}visible`] = attributes.visible ?? false;
-        } else {
-            const visible = attributes.visible;
-            if (typeof visible !== 'undefined') {
-                if (!visible) {
-                    (attrs || initAttrs())[`${propertyNamePrefix}visible`] = false;
-                } else if (typeof visible === 'function') {
-                    (attrs || initAttrs())[`${propertyNamePrefix}visible`] = visible;
-                }
+        const visible = attributes.visible;
+
+        let normalizedVisible: undefined | boolean | (() => boolean);
+        switch (typeof visible) {
+        case 'boolean':
+        case 'function':
+            normalizedVisible = visible;
+            break;
+        default: {
+            if (isStandaloneMode) {
+                normalizedVisible = (attributes.__internalFlags & PropertyStashInternalFlag.IMPLICIT_VISIBLE) !== 0;
             } else {
                 const startsWithUS = (propertyName.charCodeAt(0) === 95);
                 if (startsWithUS) {
-                    (attrs || initAttrs())[`${propertyNamePrefix}visible`] = false;
+                    normalizedVisible = false;
                 }
             }
+        }
+        }
+
+        if (typeof normalizedVisible !== 'undefined') {
+            (attrs || initAttrs())[`${propertyNamePrefix}visible`] = normalizedVisible;
         }
     }
 
@@ -638,12 +590,25 @@ function parseAttributes (constructor: Function, attributes: IAcceptableAttribut
             error(ERR_Type, 'range', className, propertyName, 'array');
         }
     }
-    parseSimpleAttribute('min', 'number');
-    parseSimpleAttribute('max', 'number');
+    if (DEV) {
+        const parseReturnNumberFuncAttribute = (attributeName: keyof IAcceptableAttributes) => {
+            const value = attributes[attributeName];
+            if (value === undefined) { return; }
+
+            if (typeof value === 'number' || typeof value === 'function') {
+                (attrs || initAttrs())[`${propertyNamePrefix}${attributeName}`] = value;
+            } else {
+                error(ERR_Type, attributeName, className, propertyName, 'number | function');
+            }
+        };
+        parseReturnNumberFuncAttribute('min');
+        parseReturnNumberFuncAttribute('max');
+    }
     parseSimpleAttribute('step', 'number');
+    parseSimpleAttribute('userData', 'object');
 }
 
-CCClass.isArray = function (defaultVal) {
+CCClass.isArray = function (defaultVal): boolean {
     defaultVal = getDefault(defaultVal);
     return Array.isArray(defaultVal);
 };
@@ -651,6 +616,7 @@ CCClass.isArray = function (defaultVal) {
 CCClass.getDefault = getDefault;
 CCClass.escapeForJS = escapeForJS;
 CCClass.IDENTIFIER_RE = IDENTIFIER_RE;
-CCClass.getNewValueTypeCode = (SUPPORT_JIT && getNewValueTypeCodeJit) as ((value: any) => string);
+// NOTE: the type of getNewValueTypeCode can be ((value: any) => string) or boolean.
+CCClass.getNewValueTypeCode = (SUPPORT_JIT && getNewValueTypeCodeJit) as any;
 
 legacyCC.Class = CCClass;

@@ -1,18 +1,17 @@
 /*
- Copyright (c) 2020 Xiamen Yaji Software Co., Ltd.
+ Copyright (c) 2020-2023 Xiamen Yaji Software Co., Ltd.
 
  https://www.cocos.com/
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
 
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
 
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,16 +20,11 @@
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
- */
-
-/**
- * @packageDocumentation
- * @module tiledmap
- */
+*/
 
 import { ccclass, displayOrder, executeInEditMode, help, menu, requireComponent, type, serializable, editable } from 'cc.decorator';
 import { EDITOR, JSB } from 'internal:constants';
-import { Component } from '../core/components';
+import { Component } from '../scene-graph/component';
 import { UITransform } from '../2d/framework';
 import { GID, Orientation, PropertiesInfo, Property, RenderOrder, StaggerAxis, StaggerIndex, TiledAnimationType, TiledTextureGrids, TileFlag,
     TMXImageLayerInfo, TMXLayerInfo, TMXObjectGroupInfo, TMXObjectType, TMXTilesetInfo } from './tiled-types';
@@ -39,9 +33,11 @@ import { TiledLayer } from './tiled-layer';
 import { TiledObjectGroup } from './tiled-object-group';
 import { TiledMapAsset } from './tiled-map-asset';
 import { Sprite } from '../2d/components/sprite';
-import { fillTextureGrids, loadAllTextures } from './tiled-utils';
-import { Size, SystemEventType, Vec2, Node, logID, Color, sys } from '../core';
+import { fillTextureGrids, enableTexelOffsetUtils } from './tiled-utils';
+import { Size, Vec2, logID, Color, sys, warnID } from '../core';
 import { SpriteFrame } from '../2d/assets';
+import { NodeEventType } from '../scene-graph/node-event';
+import { Node } from '../scene-graph';
 
 interface ImageExtendedNode extends Node {
     layerInfo: TMXImageLayerInfo;
@@ -78,8 +74,6 @@ export class TiledMap extends Component {
     _mapSize: Size = new Size(0, 0);
     _tileSize: Size = new Size(0, 0);
 
-    _preloaded = false;
-
     _mapOrientation = Orientation.ORTHO;
 
     static Orientation = Orientation;
@@ -89,6 +83,8 @@ export class TiledMap extends Component {
     static StaggerIndex = StaggerIndex;
     static TMXObjectType = TMXObjectType;
     static RenderOrder = RenderOrder;
+
+    private _isApplied = false;
 
     @serializable
     _tmxFile: TiledMapAsset | null = null;
@@ -108,9 +104,8 @@ export class TiledMap extends Component {
     set tmxAsset (value: TiledMapAsset) {
         if (this._tmxFile !== value || EDITOR) {
             this._tmxFile = value;
-            if (this._preloaded || EDITOR) {
-                this._applyFile();
-            }
+            this._applyFile();
+            this._isApplied = true;
         }
     }
 
@@ -124,7 +119,7 @@ export class TiledMap extends Component {
     @serializable
     protected _enableCulling = true;
     @editable
-    get enableCulling () {
+    get enableCulling (): boolean {
         return this._enableCulling;
     }
     set enableCulling (value) {
@@ -138,6 +133,10 @@ export class TiledMap extends Component {
     @serializable
     protected cleanupImageCache = true;
 
+    constructor () {
+        super();
+    }
+
     /**
      * @en Gets the map size.
      * @zh 获取地图大小。
@@ -147,7 +146,7 @@ export class TiledMap extends Component {
      * let mapSize = tiledMap.getMapSize();
      * cc.log("Map Size: " + mapSize);
      */
-    getMapSize () {
+    getMapSize (): Size {
         return this._mapSize;
     }
 
@@ -160,7 +159,7 @@ export class TiledMap extends Component {
      * let tileSize = tiledMap.getTileSize();
      * cc.log("Tile Size: " + tileSize);
      */
-    getTileSize () {
+    getTileSize (): Size {
         return this._tileSize;
     }
 
@@ -173,7 +172,7 @@ export class TiledMap extends Component {
      * let mapOrientation = tiledMap.getMapOrientation();
      * cc.log("Map Orientation: " + mapOrientation);
      */
-    getMapOrientation () {
+    getMapOrientation (): Orientation {
         return this._mapOrientation;
     }
 
@@ -188,7 +187,7 @@ export class TiledMap extends Component {
      *     cc.log("obj: " + objGroups[i]);
      * }
      */
-    getObjectGroups () {
+    getObjectGroups (): TiledObjectGroup[] {
         return this._groups;
     }
 
@@ -202,7 +201,7 @@ export class TiledMap extends Component {
      * let group = titledMap.getObjectGroup("Players");
      * cc.log("ObjectGroup: " + group);
      */
-    getObjectGroup (groupName: string) {
+    getObjectGroup (groupName: string): TiledObjectGroup | null {
         const groups = this._groups;
         for (let i = 0, l = groups.length; i < l; i++) {
             const group = groups[i];
@@ -225,7 +224,7 @@ export class TiledMap extends Component {
      *     cc.log("Properties: " + properties[i]);
      * }
      */
-    getProperties () {
+    getProperties (): PropertiesInfo {
         return this._properties;
     }
 
@@ -240,7 +239,7 @@ export class TiledMap extends Component {
      *     cc.log("Layers: " + layers[i]);
      * }
      */
-    getLayers () {
+    getLayers (): TiledLayer[] {
         return this._layers;
     }
 
@@ -254,7 +253,7 @@ export class TiledMap extends Component {
      * let layer = titledMap.getLayer("Player");
      * cc.log(layer);
      */
-    getLayer (layerName) {
+    getLayer (layerName): TiledLayer | null {
         const layers = this._layers;
         for (let i = 0, l = layers.length; i < l; i++) {
             const layer = layers[i];
@@ -265,7 +264,7 @@ export class TiledMap extends Component {
         return null;
     }
 
-    protected _changeLayer (layerName, replaceLayer) {
+    protected _changeLayer (layerName, replaceLayer): void {
         const layers = this._layers;
         for (let i = 0, l = layers.length; i < l; i++) {
             const layer = layers[i];
@@ -286,7 +285,7 @@ export class TiledMap extends Component {
      * let property = titledMap.getProperty("info");
      * cc.log("Property: " + property);
      */
-    getProperty (propertyName: string) {
+    getProperty (propertyName: string): string | number {
         return this._properties[propertyName.toString()];
     }
 
@@ -300,29 +299,45 @@ export class TiledMap extends Component {
      * let properties = titledMap.getPropertiesForGID(GID);
      * cc.log("Properties: " + properties);
      */
-    getPropertiesForGID (gid: GID) {
+    getPropertiesForGID (gid: GID): PropertiesInfo | undefined {
         return this._tileProperties.get(gid);
     }
 
-    __preload () {
-        this._preloaded = true;
+    /**
+     * @en Enables or disables texel offset correction to fix rendering issues like grid edge artifacts.
+     * This function adjusts the texture coordinates of each grid in the tilemap by applying
+     * a 0.5-pixel offset, ensuring that grid edges do not show black lines or artifacts caused by
+     * texture sampling inaccuracies. This is especially useful for tile-based rendering systems.
+     * @zh 启用或禁用像素偏移修正，用于修复网格边缘的渲染问题（如黑线）。此函数通过对每个 tilemap 网格的纹理坐标应用 0.5 像素
+     * 的偏移来调整，确保网格边缘不会出现因纹理采样不准确导致的黑线或其他伪影问题。对基于图块的渲染系统特别有用。
+     *
+     * @param enable
+     * @en Whether to enable (true) or disable (false) the texel offset correction.
+     * @zh 是否启用 (true) 或禁用 (false) 像素偏移修正。
+     */
+    enableTexelOffset (enable: boolean): void {
+        enableTexelOffsetUtils(enable);
+    }
 
+    __preload (): void {
         if (!this._tmxFile) {
             return;
         }
-
-        this._applyFile();
+        if (this._isApplied === false) {
+            this._applyFile();
+            this._isApplied = true;
+        }
     }
 
-    onEnable () {
-        this.node.on(SystemEventType.ANCHOR_CHANGED, this._syncAnchorPoint, this);
+    onEnable (): void {
+        this.node.on(NodeEventType.ANCHOR_CHANGED, this._syncAnchorPoint, this);
     }
 
-    onDisable () {
-        this.node.off(SystemEventType.ANCHOR_CHANGED, this._syncAnchorPoint, this);
+    onDisable (): void {
+        this.node.off(NodeEventType.ANCHOR_CHANGED, this._syncAnchorPoint, this);
     }
 
-    _applyFile () {
+    _applyFile (): void {
         const spriteFrames: SpriteFrame[] = [];
         const spriteFramesCache = {};
 
@@ -376,10 +391,12 @@ export class TiledMap extends Component {
         }
     }
 
-    _releaseMapInfo () {
+    _releaseMapInfo (): void {
         // remove the layers & object groups added before
         const layers = this._layers;
         for (let i = 0, l = layers.length; i < l; i++) {
+            layers[i].node.parent?.off(NodeEventType.SIZE_CHANGED, layers[i].updateCulling, layers[i]);
+            layers[i].node.parent?.off(NodeEventType.TRANSFORM_CHANGED, layers[i].updateCulling, layers[i]);
             layers[i].node.removeFromParent();
             layers[i].node.destroy();
         }
@@ -400,10 +417,10 @@ export class TiledMap extends Component {
         images.length = 0;
     }
 
-    _syncAnchorPoint () {
-        const anchor = this.node._uiProps.uiTransformComp!.anchorPoint;
-        const leftTopX = this.node._uiProps.uiTransformComp!.width * anchor.x;
-        const leftTopY = this.node._uiProps.uiTransformComp!.height * (1 - anchor.y);
+    _syncAnchorPoint (): void {
+        const anchor = this.node._getUITransformComp()!.anchorPoint;
+        const leftTopX = this.node._getUITransformComp()!.width * anchor.x;
+        const leftTopY = this.node._getUITransformComp()!.height * (1 - anchor.y);
         let i: number;
         let l: number;
         for (i = 0, l = this._layers.length; i < l; i++) {
@@ -411,12 +428,12 @@ export class TiledMap extends Component {
             const layerNode = layerInfo.node;
             // Tiled layer sync anchor to map because it's old behavior,
             // do not change the behavior avoid influence user's existed logic.
-            layerNode._uiProps.uiTransformComp!.setAnchorPoint(anchor);
+            layerNode._getUITransformComp()!.setAnchorPoint(anchor);
         }
 
         for (i = 0, l = this._groups.length; i < l; i++) {
             const groupInfo = this._groups[i];
-            const groupNode = groupInfo.node._uiProps.uiTransformComp!;
+            const groupNode = groupInfo.node._getUITransformComp()!;
             // Group layer not sync anchor to map because it's old behavior,
             // do not change the behavior avoid influence user's existing logic.
             groupNode.anchorX = 0.5;
@@ -427,7 +444,7 @@ export class TiledMap extends Component {
         }
 
         for (i = 0, l = this._images.length; i < l; i++) {
-            const image = this._images[i]._uiProps.uiTransformComp!;
+            const image = this._images[i]._getUITransformComp()!;
             image.anchorX = 0.5;
             image.anchorY = 0.5;
             const x = this._images[i]._offset.x - leftTopX + image.width * image.anchorX;
@@ -436,7 +453,7 @@ export class TiledMap extends Component {
         }
     }
 
-    _fillAniGrids (texGrids: TiledTextureGrids, animations: TiledAnimationType) {
+    _fillAniGrids (texGrids: TiledTextureGrids, animations: TiledAnimationType): void {
         for (const i of animations.keys()) {
             const animation = animations.get(i);
             if (!animation) continue;
@@ -448,7 +465,7 @@ export class TiledMap extends Component {
         }
     }
 
-    _buildLayerAndGroup () {
+    _buildLayerAndGroup (): void {
         const tilesets = this._tilesets;
         const texGrids = this._texGrids;
         const animations = this._animations;
@@ -458,7 +475,7 @@ export class TiledMap extends Component {
             const tilesetInfo = tilesets[i];
             if (!tilesetInfo) continue;
             if (!tilesetInfo.sourceImage) {
-                console.warn(`Can't find the spriteFrame of tilesets ${i}`);
+                warnID(16406, i);
                 continue;
             }
             fillTextureGrids(tilesetInfo, texGrids, tilesetInfo.sourceImage);
@@ -528,7 +545,7 @@ export class TiledMap extends Component {
                     group._init(layerInfo, mapInfo, texGrids);
                     groups.push(group);
                 } else if (layerInfo instanceof TMXImageLayerInfo) {
-                    const texture = layerInfo.sourceImage;
+                    const spriteFrame = layerInfo.sourceImage;
 
                     child.layerInfo = layerInfo;
                     child._offset = new Vec2(layerInfo.offset.x, -layerInfo.offset.y);
@@ -541,14 +558,20 @@ export class TiledMap extends Component {
                     const color = image.color as Color;
                     color.a *= layerInfo.opacity;
 
-                    image.spriteFrame = texture!;
+                    image.spriteFrame = spriteFrame!;
+                    let width = spriteFrame!.width;
+                    let height = spriteFrame!.height;
+                    if (spriteFrame!.original) {
+                        width = spriteFrame!.originalSize.width;
+                        height = spriteFrame!.originalSize.height;
+                    }
 
-                    child._uiProps.uiTransformComp!.setContentSize(texture!.width, texture!.height);
+                    child._getUITransformComp()!.setContentSize(width, height);
                     images.push(child);
                 }
 
-                maxWidth = Math.max(maxWidth, child._uiProps.uiTransformComp!.width);
-                maxHeight = Math.max(maxHeight, child._uiProps.uiTransformComp!.height);
+                maxWidth = Math.max(maxWidth, child._getUITransformComp()!.width);
+                maxHeight = Math.max(maxHeight, child._getUITransformComp()!.height);
             }
         }
 
@@ -560,11 +583,11 @@ export class TiledMap extends Component {
             }
         }
 
-        this.node._uiProps.uiTransformComp!.setContentSize(maxWidth, maxHeight);
+        this.node._getUITransformComp()!.setContentSize(maxWidth, maxHeight);
         this._syncAnchorPoint();
     }
 
-    protected _buildWithMapInfo (mapInfo: TMXMapInfo) {
+    protected _buildWithMapInfo (mapInfo: TMXMapInfo): void {
         this._mapInfo = mapInfo;
         this._mapSize = mapInfo.getMapSize();
         this._tileSize = mapInfo.getTileSize();
@@ -592,27 +615,25 @@ export class TiledMap extends Component {
             totalTextures.push(imageLayer.sourceImage);
         }
 
-        loadAllTextures(totalTextures, () => {
-            this._buildLayerAndGroup();
-            if (this.cleanupImageCache) {
-                this._textures.forEach((tex) => {
-                    this.doCleanupImageCache(tex);
-                });
-            }
-        });
+        this._buildLayerAndGroup();
+        if (this.cleanupImageCache) {
+            this._textures.forEach((tex) => {
+                this.doCleanupImageCache(tex);
+            });
+        }
     }
 
-    doCleanupImageCache (texture) {
+    doCleanupImageCache (texture): void {
         if (texture._image instanceof HTMLImageElement) {
             texture._image.src = '';
             if (JSB) texture._image.destroy();
-        } else if (sys.capabilities.imageBitmap && texture._image instanceof ImageBitmap) {
+        } else if (sys.hasFeature(sys.Feature.IMAGE_BITMAP) && texture._image instanceof ImageBitmap) {
             if (texture._image.close) texture._image.close();
         }
         texture._image = null;
     }
 
-    update (dt: number) {
+    lateUpdate (dt: number): void {
         const animations = this._animations;
         const texGrids = this._texGrids;
         for (const aniGID of animations.keys()) {
@@ -630,9 +651,11 @@ export class TiledMap extends Component {
             }
             texGrids.set(aniGID, frame.grid!);
         }
-        for (const layer of this.getLayers()) {
-            if (layer.hasAnimation()) {
-                layer.markForUpdateRenderData();
+        const layers = this.getLayers();
+        for (let i = 0, l = layers.length; i < l; i++) {
+            const layer = layers[i];
+            if (layer.hasAnimation() || layer.node.hasChangedFlags) {
+                layer._markForUpdateRenderData();
             }
         }
     }
